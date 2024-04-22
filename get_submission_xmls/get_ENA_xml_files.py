@@ -15,8 +15,10 @@ import pandas as pd
 # Contact email: jessica.gomez@cnag.eu
 # Date:20230602
 
-script_loc = os.path.dirname(sys.argv[0])
-env = jinja2.Environment(loader=jinja2.FileSystemLoader(script_loc + "/templates/"))
+script_loc = os.path.dirname(os.path.abspath(sys.argv[0]))
+env = jinja2.Environment(
+    loader=jinja2.FileSystemLoader(os.path.join(script_loc, "templates/"))
+)
 
 
 def get_attributes(root, parent, child, attr, **element):
@@ -40,21 +42,23 @@ def get_studies(
     species,
     sample_coordinator,
     study_type,
-    use,
     locus_tag,
 ):
-    study_title = species + " " + study_type
+    study_title = ""
+    if study_type == "assembly":
+        study_title = "Genome assembly of " + species
+    elif study_type == "sequencing":
+        study_title = "Sequencing data of " + species
+
     description = ""
     study_name = tolid
-    if study_type == "genome assembly":
+    if study_type == "assembly":
         alias = cname.replace(" ", "_") + "_genome_assembly"
         study_title = env.get_template("assembly_title.txt").render(
             species=species, cname=cname, tolid=tolid
         )
         if project == "ERGA-pilot":
             description_template = "pilot_assembly_description.txt"
-        elif project == "CBP":
-            description_template = "cbp_assembly_description.txt"
         elif project == "ERGA-BGE":
             alias = (
                 "erga-bge-" + tolid + "_primary-" + datetime.now().strftime("%Y-%m-%d")
@@ -63,101 +67,34 @@ def get_studies(
                 species=species, tolid=tolid
             )
             description_template = "bge_assembly_description.txt"
-        else:
-            description_template = "other_assembly_description.txt"
+        elif project == "ATLASea":
+            description_template = "atlasea_assembly_description.txt"
         description = env.get_template(description_template).render(
             species=species,
             cname=cname,
             sample_coordinator=sample_coordinator,
-            use=use.lower(),
         )
-    elif study_type == "alternate assembly":
-        alt_use = use
-        if alternate_annot == "no":
-            alt_use = "assembly"
-        alias = cname.replace(" ", "_") + "_alternate_genome_assembly"
-        study_name += ", alternate haplotype"
-        study_title = env.get_template("alternate_assembly_title.txt").render(
-            species=species, cname=cname, tolid=tolid
-        )
-        if project == "ERGA-pilot":
-            description_template = "pilot_alternate_assembly_description.txt"
-        elif project == "CBP":
-            description_template = "cbp_alternate_assembly_description.txt"
-        elif project == "ERGA-BGE":
-            alias = (
-                "erga-bge-"
-                + tolid
-                + "_alternate-"
-                + datetime.now().strftime("%Y-%m-%d")
-            )
-            study_title = env.get_template("bge_alternate_assembly_title.txt").render(
-                species=species, tolid=tolid
-            )
-            description_template = "bge_alternate_assembly_description.txt"
-        else:
-            description_template = "other_alternate_assembly_description.txt"
-        description = env.get_template(description_template).render(
-            species=species,
-            cname=cname,
-            sample_coordinator=sample_coordinator,
-            use=alt_use.lower(),
-        )
-    elif study_type == "resequencing Data":
-        alias = cname.replace(" ", "_") + "_resequencing_data"
-        study_register[tolid_pref] = alias
+    elif study_type == "sequencing":
+        alias = cname.replace(" ", "_") + "_sequencing_data"
+        study_register[tolid] = alias
         description = (
-            "This project collects the "
-            + study_type
-            + " generated for "
+            "This project collects the sequencing data generated for "
             + species
             + " (common name "
             + cname
             + ")"
         )
-    else:
-        alias = cname.replace(" ", "_") + "_data"
-        study_title = env.get_template("data_title.txt").render(
-            species=species, cname=cname, data=study_type
-        )
-        study_name = tolid_pref
-        if project == "ERGA-pilot":
-            description_template = "pilot_data_description.txt"
-        elif project == "CBP":
-            description_template = "cbp_data_description.txt"
-        elif project == "ERGA-BGE":
-            alias = (
-                "erga-bge-"
-                + tolid_pref
-                + "-study-rawdata-"
-                + datetime.now().strftime("%Y-%m-%d")
-            )
-            study_title = env.get_template("bge_data_title.txt").render(
-                species=species, data=study_type
-            )
-            description_template = "bge_data_description.txt"
-        else:
-            description_template = "other_data_description.txt"
-        study_register[tolid_pref] = alias
-        description = env.get_template(description_template).render(
-            species=species,
-            cname=cname,
-            sample_coordinator=sample_coordinator,
-            data=study_type,
-            use=use.lower(),
-        )
 
-    if "all" in args.xml or "study" in args.xml:
-        get_study_xml(
-            project,
-            center,
-            alias,
-            study_name,
-            study_title,
-            description,
-            study_type,
-            locus_tag,
-        )
+    get_study_xml(
+        project,
+        center,
+        alias,
+        study_name,
+        study_title,
+        description,
+        study_type,
+        locus_tag,
+    )
 
 
 def get_study_xml(
@@ -187,17 +124,10 @@ def get_study_xml(
     )
 
     seqp = root["study"].createElement("SEQUENCING_PROJECT")
-    if study_type == "genome assembly" and locus_tag != "-":
+    if study_type == "assembly" and locus_tag != "-":
         loc = ""
         loc = get_attributes(
             root["study"], seqp, loc, "LOCUS_TAG_PREFIX", **{locus_tag: ""}
-        )
-
-    if study_type == "alternate assembly" and alternate_annot == "yes":
-        hlocus_tag = locus_tag + "H2"
-        loc = ""
-        loc = get_attributes(
-            root["study"], seqp, loc, "LOCUS_TAG_PREFIX", **{hlocus_tag: ""}
         )
     attributes.appendChild(seqp)
 
@@ -218,16 +148,15 @@ def get_study_xml(
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "-f", "--files", required=True, help="TABLE file with appropriate headers"
-    )
-    parser.add_argument(
         "-p",
         "--project",
         default="ERGA-BGE",
-        choices=["ERGA-BGE", "CBP", "ERGA-pilot", "EASI", "ATLASEA", "other"],
+        choices=["ERGA-BGE", "CBP", "ERGA-pilot", "EASI", "ATLASea", "other"],
         help="project",
     )
-    parser.add_argument("-c", "--center", default="Genoscope", help="center name (Default: Genoscope)")
+    parser.add_argument(
+        "-c", "--center", default="Genoscope", help="center name (Default: Genoscope)"
+    )
     parser.add_argument("-n", "--name", required=False, help="Species common name")
     parser.add_argument(
         "--sample-ambassador",
@@ -238,8 +167,17 @@ if __name__ == "__main__":
     parser.add_argument(
         "-s", "--species", required=True, help="species scientific name"
     )
-    parser.add_argument("-x", "--taxon_id", required=True, help="species taxon_id")
-    parser.add_argument("-l", "--locus_tag", required=False, help="Locus tag to register for the study")
+    parser.add_argument("-x", "--taxon-id", required=True, help="species taxon_id")
+    parser.add_argument(
+        "-l", "--locus-tag", required=False, help="Locus tag to register for the study"
+    )
+    parser.add_argument(
+        "--study-type",
+        required=True,
+        choices=["assembly", "sequencing"],
+        help="Study type",
+    )
+    parser.add_argument("-o", "--out-prefix", required=True, help="Output name")
     args = parser.parse_args()
 
     root = {}
@@ -254,6 +192,7 @@ if __name__ == "__main__":
     cname = args.name
     sample_coordinator = args.sample_ambassador
     locus_tag = args.locus_tag
+    study_type = args.study_type
 
     get_studies(
         args.project,
@@ -262,7 +201,7 @@ if __name__ == "__main__":
         tolid,
         species,
         sample_coordinator,
-        type,
+        study_type,
         locus_tag,
     )
 
