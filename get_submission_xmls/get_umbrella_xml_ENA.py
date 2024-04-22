@@ -15,8 +15,8 @@ import pandas as pd
 # Contact email: jessica.gomez@cnag.eu
 # Date:20230602
 
-script_loc = os.path.dirname(sys.argv[0])
-env = jinja2.Environment(loader=jinja2.FileSystemLoader(script_loc + "/templates/"))
+script_loc = os.path.dirname(os.path.abspath(sys.argv[0]))
+env = jinja2.Environment(loader=jinja2.FileSystemLoader(os.path.join(script_loc, "templates/")))
 
 
 def get_attributes(root, parent, child, attr, **element):
