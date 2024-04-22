@@ -83,7 +83,7 @@ if __name__ == "__main__":
     parser.add_argument("-t", "--tolid", required=True, help="tolid")
     parser.add_argument("-s", "--species", required=True, help="species scientific name")
     parser.add_argument("-x", "--taxon_id", required=True, help="species taxon_id")
-    parser.add_argument("-a", "--children_accessions", required=True, nargs="+", help="species scientific name")
+    parser.add_argument("-a", "--children_accessions", required=True, nargs="+", help="Children projects accessions, can be given multiple times")
     
     args = parser.parse_args()
     root = minidom.Document()
