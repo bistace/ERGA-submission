@@ -90,7 +90,7 @@ if __name__ == "__main__":
         choices=["ERGA-BGE", "CBP", "ERGA-pilot", "EASI", "ATLASea", "other"],
         help="project",
     )
-    parser.add_argument("-c", "--center", default="Genoscope", help="center name")
+    parser.add_argument("-c", "--center", default="Genoscope", help="center name (Default: Genoscope)")
     parser.add_argument("-n", "--name", required=False, help="Species common name")
     parser.add_argument(
         "--sample-ambassador",
@@ -107,7 +107,7 @@ if __name__ == "__main__":
         "--children_accessions",
         required=True,
         nargs="+",
-        help="Children projects accessions, can be given multiple times",
+        help="Children projects accessions separated by spaces (Example: '-a PRJEB1 PRJEB2 PRJEB3')",
     )
 
     args = parser.parse_args()
