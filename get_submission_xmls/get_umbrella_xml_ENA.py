@@ -76,7 +76,7 @@ def get_xml (project, center, species, tolid_pref, description, children):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("-p", "--project", default = 'ERGA-BGE', choices=['ERGA-BGE', 'CBP', 'ERGA-pilot', 'EASI', 'other'], help="project")
+    parser.add_argument("-p", "--project", default = 'ERGA-BGE', choices=['ERGA-BGE', 'CBP', 'ERGA-pilot', 'EASI', 'ATLASea', 'other'], help="project")
     parser.add_argument("-c", "--center", default="CNAG", help="center name")
     parser.add_argument("-n", "--name", required=False, help="common name")
     parser.add_argument("--sample-ambassador", required=False, help="Sample ambassador for ERGA-pilot projects")
