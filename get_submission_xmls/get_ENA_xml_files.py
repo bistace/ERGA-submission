@@ -424,7 +424,7 @@ if __name__ == "__main__":
         "-p",
         "--project",
         default="ERGA-BGE",
-        choices=["ERGA-BGE", "CBP", "ERGA-pilot", "EASI", "other"],
+        choices=["ERGA-BGE", "CBP", "ERGA-pilot", "EASI", "ATLASEA", "other"],
         help="project",
     )
     parser.add_argument(
