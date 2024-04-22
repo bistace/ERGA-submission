@@ -1,1 +1,1 @@
-This project collects the {{data}} generated for {{species}}, {{cname}}, to facilitate genome {{use}}.
+This project collects the {{data}} generated for {{species}}, {{cname}}.

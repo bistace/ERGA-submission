@@ -84,6 +84,28 @@ def get_studies(
             + cname
             + ")"
         )
+        if project == "ERGA-pilot":
+            description_template = "pilot_data_description.txt"
+        elif project == "ERGA-BGE":
+            alias = (
+                "erga-bge-"
+                + tolid
+                + "-study-rawdata-"
+                + datetime.now().strftime("%Y-%m-%d")
+            )
+            study_title = env.get_template("bge_data_title.txt").render(
+                species=species, data=study_type
+            )
+            description_template = "bge_data_description.txt"
+        else:
+            description_template = "other_data_description.txt"
+        study_register[tolid] = alias
+        description = env.get_template(description_template).render(
+            species=species,
+            cname=cname,
+            sample_coordinator=sample_coordinator,
+            data=study_type,
+        )
 
     get_study_xml(
         project,
