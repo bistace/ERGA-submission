@@ -77,9 +77,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
     parser.add_argument("-p", "--project", default = 'ERGA-BGE', choices=['ERGA-BGE', 'CBP', 'ERGA-pilot', 'EASI', 'ATLASea', 'other'], help="project")
-    parser.add_argument("-c", "--center", default="CNAG", help="center name")
-    parser.add_argument("-n", "--name", required=False, help="common name")
-    parser.add_argument("--sample-ambassador", required=False, help="Sample ambassador for ERGA-pilot projects")
+    parser.add_argument("-c", "--center", default="Genoscope", help="center name")
+    parser.add_argument("-n", "--name", required=False, help="Species common name")
+    parser.add_argument("--sample-ambassador", required=False, help="Sample ambassador (only for ERGA-pilot projects)")
     parser.add_argument("-t", "--tolid", required=True, help="tolid")
     parser.add_argument("-s", "--species", required=True, help="species scientific name")
     parser.add_argument("-x", "--taxon_id", required=True, help="species taxon_id")
