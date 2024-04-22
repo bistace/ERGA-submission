@@ -16,9 +16,7 @@ import pandas as pd
 # Date:20230602
 
 script_loc = os.path.dirname(os.path.abspath(sys.argv[0]))
-env = jinja2.Environment(
-    loader=jinja2.FileSystemLoader(os.path.join(script_loc, "templates/"))
-)
+env = jinja2.Environment(loader=jinja2.FileSystemLoader(os.path.join(script_loc, "templates/")))
 
 
 def get_attributes(root, parent, child, attr, **element):
@@ -92,9 +90,7 @@ if __name__ == "__main__":
         choices=["ERGA-BGE", "CBP", "ERGA-pilot", "EASI", "ATLASea", "other"],
         help="project",
     )
-    parser.add_argument(
-        "-c", "--center", default="Genoscope", help="center name (Default: Genoscope)"
-    )
+    parser.add_argument("-c", "--center", default="Genoscope", help="center name (Default: Genoscope)")
     parser.add_argument("-n", "--name", required=False, help="Species common name")
     parser.add_argument(
         "--sample-ambassador",
@@ -143,6 +139,9 @@ if __name__ == "__main__":
             + datetime.now().strftime("%Y-%m-%d")
         )
         description_template = "bge_umbrella_description.txt"
+    elif args.project == "ATLASea":
+        alias = tolid_pref + "-study-umbrella-" + datetime.now().strftime("%Y-%m-%d")
+        description_template = "atlasea_umbrella_description.txt"
     else:
         alias = tolid_pref + "-study-umbrella-" + datetime.now().strftime("%Y-%m-%d")
         description_template = "other_umbrella_description.txt"

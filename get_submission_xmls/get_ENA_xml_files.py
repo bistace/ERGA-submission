@@ -97,6 +97,8 @@ def get_studies(
                 species=species, data=study_type
             )
             description_template = "bge_data_description.txt"
+        elif project == "ATLASea":
+            description_template = "atlasea_data_description.txt"
         else:
             description_template = "other_data_description.txt"
         study_register[tolid] = alias
