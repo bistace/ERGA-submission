@@ -1,1 +1,1 @@
-{{species}} genome assembly and annotation
+This project provides the genome assembly of {{species}}. The assembly is provided by the ATLASea programme (https://www.atlasea.fr)

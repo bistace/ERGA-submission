@@ -1,1 +1,1 @@
-{{species}} genomic data
+This project collects the genomic and transcriptomic generated for {{species}} to facilitate genome assembly and annotation as part of the ATLASea programme (https://www.atlasea.fr)
