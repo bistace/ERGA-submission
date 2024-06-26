@@ -1,15 +1,16 @@
 #!/usr/bin/env python
-import os
-from os import path
-import json
 import argparse
-import sys
-from xml.dom import minidom
-from collections import OrderedDict
+import configparser
 import jinja2
-from datetime import datetime
+import os
 import re
-import pandas as pd
+import subprocess
+import sys
+import xml.etree.ElementTree as ET
+
+from collections import OrderedDict
+from datetime import datetime
+from xml.dom import minidom
 
 # Author: Jessica Gomez-Garrido, CNAG.
 # Contact email: jessica.gomez@cnag.eu
@@ -80,6 +81,59 @@ def get_xml(project, center, species, tolid_pref, description, children):
         )
 
 
+def read_credentials(filename=os.path.join(os.environ["HOME"], ".EBI/ebi.ini")):
+    config = configparser.ConfigParser()
+    config.read(filename)
+    account = config.get('Credentials', 'account')
+    password = config.get('Credentials', 'password')
+    return account, password
+
+
+def generate_submission_xml():
+    sub = ET.Element('SUBMISSION')
+    actions = ET.SubElement(sub, 'ACTIONS')
+    action = ET.SubElement(actions, 'ACTION')
+    ET.SubElement(action, 'ADD')
+
+    xml_string = minidom.parseString(ET.tostring(sub)).toprettyxml(indent="\t", encoding="utf-8")
+    with open("submission.xml", 'wb') as xml_file:
+        xml_file.write(xml_string)
+
+
+def submit_study(xml_path, test=True):
+    account, password = read_credentials()
+    generate_submission_xml()
+
+    url = ""
+    if test:
+        url = '"https://wwwdev.ebi.ac.uk/ena/submit/drop-box/submit/"'
+
+    curl_command = f"curl -u {account}:{password} " \
+        f"""-F "SUBMISSION=@submission.xml" -F "PROJECT=@{xml_path}" """\
+        f'{url}'
+    print(f" => Submitting: {curl_command}", file=sys.stderr)
+
+    p = subprocess.Popen(
+        curl_command, shell=True,
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+    )
+    out, err = p.communicate()
+
+    receipt = ET.fromstring(out.decode("utf-8"))
+    success = receipt.get("success")
+    if success == "false":
+        print(f"Error running curl command, return code: {p.returncode}", file=sys.stderr)
+        print("STDOUT:", out.decode("utf-8"), file=sys.stderr)
+        print("STDERR:", err.decode("utf-8"), file=sys.stderr)
+        sys.exit(1)
+    else:
+        if test:
+            print("Test submission was successfull")
+        else:
+            print("Submission was successfull")
+    print("STDOUT: \n", {out.decode("utf-8")}, file=sys.stderr)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
@@ -109,6 +163,10 @@ if __name__ == "__main__":
         nargs="+",
         help="Children projects accessions separated by spaces (Example: '-a PRJEB1 PRJEB2 PRJEB3')",
     )
+    parser.add_argument(
+        "--commit", 
+        dest="commit", action="store_true", required=False, 
+        help="Do an actual submission if the test is successfull")
 
     args = parser.parse_args()
     root = minidom.Document()
@@ -168,3 +226,5 @@ if __name__ == "__main__":
 
     with open(save_path_file, "w") as f:
         f.write(xml_str)
+
+    submit_study(save_path_file, not args.commit)

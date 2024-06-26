@@ -215,12 +215,13 @@ def submit_study(xml_path, test=True):
         print("STDOUT:", out.decode("utf-8"), file=sys.stderr)
         print("STDERR:", err.decode("utf-8"), file=sys.stderr)
         sys.exit(1)
+
+    if test:
+        print("Test submission was successfull")
     else:
-        if test:
-            print("Test submission was successfull")
-        else:
-            print("Submission was successfull")
-            print("STDOUT: \n", {out.decode("utf-8")})
+        print("Submission was successfull")
+    print("STDOUT: \n", {err.decode("utf-8")}, file=sys.stderr)
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
