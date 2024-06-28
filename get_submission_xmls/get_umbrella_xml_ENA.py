@@ -131,7 +131,8 @@ def submit_study(xml_path, test=True):
             print("Test submission was successfull")
         else:
             print("Submission was successfull")
-    print("STDOUT: \n", {out.decode("utf-8")}, file=sys.stderr)
+    print("STDOUT: \n", out.decode("utf-8"), file=sys.stderr)
+    print("STDERR: \n", err.decode("utf-8"), file=sys.stderr)
 
 
 if __name__ == "__main__":
@@ -173,7 +174,7 @@ if __name__ == "__main__":
     xml = root.createElement("PROJECT_SET")
     root.appendChild(xml)
 
-    tolid_pref = re.sub(r"[0-9]", "", args.tolid)
+    tolid_pref = args.tolid
     if args.project == "ERGA-pilot":
         alias = args.name
         description_template = "pilot_umbrella_description.txt"
@@ -222,8 +223,7 @@ if __name__ == "__main__":
     )
     xml_str = root.toprettyxml(indent="\t")
 
-    save_path_file = "umbrella.xml"
-
+    save_path_file = args.species.replace(" ", "_") + ".umbrella.xml"
     with open(save_path_file, "w") as f:
         f.write(xml_str)
 

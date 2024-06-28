@@ -220,7 +220,8 @@ def submit_study(xml_path, test=True):
         print("Test submission was successfull")
     else:
         print("Submission was successfull")
-    print("STDOUT: \n", {err.decode("utf-8")}, file=sys.stderr)
+    print("STDOUT: \n", out.decode("utf-8"), file=sys.stderr)
+    print("STDERR: \n", err.decode("utf-8"), file=sys.stderr)
 
 
 if __name__ == "__main__":
@@ -256,7 +257,6 @@ if __name__ == "__main__":
         choices=["assembly", "sequencing"],
         help="Study type",
     )
-    parser.add_argument("-o", "--out-prefix", required=True, help="Output name")
     parser.add_argument("--commit", dest="commit", action="store_true", required=False, help="Do an actual submission if the test is successfull")
     args = parser.parse_args()
 
@@ -288,7 +288,7 @@ if __name__ == "__main__":
     save_path = ""
     for i in root:
         xml_str = root[i].toprettyxml(indent="\t")
-        save_path_file = args.out_prefix + "." + i + ".xml"
+        save_path_file = species.replace(" ", "_") + "." + i + "." + study_type + ".xml"
         save_path = save_path_file
         with open(save_path_file, "w") as f:
             f.write(xml_str)
