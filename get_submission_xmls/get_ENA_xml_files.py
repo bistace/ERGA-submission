@@ -262,6 +262,14 @@ if __name__ == "__main__":
     parser.add_argument("--commit", dest="commit", action="store_true", required=False, help="Do an actual submission if the test is successfull")
     args = parser.parse_args()
 
+    cred_path = os.path.join(os.environ["HOME"], ".EBI/ebi.ini")
+    if not os.path.exists(cred_path):
+        print(f"ERROR: credentials not found at path '{cred_path}'")
+
+    cred_path = os.path.join(os.environ["HOME"], ".EBI/ebi.ini")
+    if not os.path.exists(cred_path):
+        print(f"ERROR: credentials not found at path '{cred_path}'")
+
     root = {}
     root["study"] = minidom.Document()
     study_xml = root["study"].createElement("PROJECT_SET")
