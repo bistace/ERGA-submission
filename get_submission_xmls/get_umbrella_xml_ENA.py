@@ -107,6 +107,8 @@ def submit_study(xml_path, test=True):
     url = ""
     if test:
         url = '"https://wwwdev.ebi.ac.uk/ena/submit/drop-box/submit/"'
+    else:
+        url = '"https://www.ebi.ac.uk/ena/submit/drop-box/submit"'
 
     curl_command = f"curl -u {account}:{password} " \
         f"""-F "SUBMISSION=@submission.xml" -F "PROJECT=@{xml_path}" """\
