@@ -130,16 +130,22 @@ def submit_study(xml_path, test=True):
         print("STDOUT:", out.decode("utf-8"), file=sys.stderr)
         print("STDERR:", err.decode("utf-8"), file=sys.stderr)
         sys.exit(1)
+
+    # Print the project ID in case of success
+    for child in receipt:
+        if child.tag == "PROJECT":
+            print(child.get("accession"))
+            break
+
+    if test:
+        print("Test submission was successfull", file=sys.stderr)
     else:
-        if test:
-            print("Test submission was successfull", file=sys.stderr)
-        else:
-            print("Submission was successfull", file=sys.stderr)
-            
+        print("Submission was successfull", file=sys.stderr)
+
     print("STDOUT: \n", out.decode("utf-8"), file=sys.stderr)
     with open(xml_path.replace(".xml", ".receipt.xml"), "w") as fout:
         print("STDOUT: \n", out.decode("utf-8"), file=fout)
-    
+
     print("STDERR: \n", err.decode("utf-8"), file=sys.stderr)
 
 
