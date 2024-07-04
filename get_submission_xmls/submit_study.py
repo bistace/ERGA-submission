@@ -191,6 +191,8 @@ def generate_submission_xml():
     actions = ET.SubElement(sub, 'ACTIONS')
     action = ET.SubElement(actions, 'ACTION')
     ET.SubElement(action, 'ADD')
+    action = ET.SubElement(actions, 'ACTION')
+    ET.SubElement(action, "HOLD", {"HoldUntilDate": datetime.now().strftime("%Y-%m-%d")})
 
     xml_string = minidom.parseString(ET.tostring(sub)).toprettyxml(indent="\t", encoding="utf-8")
     with open("submission.xml", 'wb') as xml_file:
