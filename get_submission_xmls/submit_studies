@@ -1,0 +1,71 @@
+#!/usr/bin/bash
+
+
+help() 
+{
+    echo
+    echo "Submits sequencing, assembly and umbrella studies at ENA"
+    echo 
+    echo "Usage: submit_studies -p PROJECT -n \"SPECIES_NAME\" -t TOLID -x TAXID [-l LOCUS_TAG -s]"
+    echo
+    echo "Arguments:"
+    echo "p    Parent project. Can be one of {ERGA-BGE,CBP,ERGA-pilot,EASI,ATLASea,other}"
+    echo "n    Scientific species name between quotes"
+    echo "t    ToLID, can be found here: https://id.tol.sanger.ac.uk/"
+    echo "x    TaxID, can be found at the same place as the ToLID"
+    echo "l    Optional. Locus tag to declare at the same time as the assembly"
+    echo "s    Optional. If present, do an actual submission instead of a test one"
+    echo
+}
+
+# Do not start if no arguments were provided
+[ $# -lt 2 ] && { help ; exit 2 ; }
+
+project=""
+name=""
+tolid=""
+taxid=""
+locus_tag="-"
+submit=false
+
+while getopts "hp:n:t:x:l:s" flag
+do
+    case "${flag}" in
+        h) 
+            help
+            exit
+            ;;
+        p) 
+            project=${OPTARG}
+            ;;
+        n) 
+            name=${OPTARG}
+            ;;
+        t) 
+            tolid=${OPTARG}
+            ;;
+        x) 
+            taxid=${OPTARG}
+            ;;
+        l)
+            locus_tag=${OPTARG}
+            ;;
+        s)
+            submit=true
+            ;;
+        \?) 
+            echo "Invalid option: -$OPTARG" >&2
+            ;;
+    esac
+done
+
+submit_arg=""
+if [ "$submit" = true ] ; then
+    submit_arg="--submit"
+fi
+
+set -euo pipefail
+
+sequencing=$(submit_study.py -p $project -n "$name" -s "$name" -t $tolid -x $taxid -l ${locus_tag} --study-type sequencing ${submit_arg})
+assembly=$(submit_study.py -p $project -n "$name" -s "$name" -t $tolid -x $taxid -l ${locus_tag} --study-type assembly ${submit_arg})
+umbrella=$(submit_umbrella.py -p $project -n "$name" -s "$name" -t $tolid -x $taxid ${submit_arg} -a $sequencing $assembly)
