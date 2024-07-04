@@ -173,7 +173,7 @@ if __name__ == "__main__":
         help="Children projects accessions separated by spaces (Example: '-a PRJEB1 PRJEB2 PRJEB3')",
     )
     parser.add_argument(
-        "--commit", 
+        "--submit", 
         dest="commit", action="store_true", required=False, 
         help="Do an actual submission if the test is successfull")
 

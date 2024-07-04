@@ -273,7 +273,7 @@ if __name__ == "__main__":
         choices=["assembly", "sequencing"],
         help="Study type",
     )
-    parser.add_argument("--commit", dest="commit", action="store_true", required=False, help="Do an actual submission if the test is successfull")
+    parser.add_argument("--submit", dest="commit", action="store_true", required=False, help="Do an actual submission if the test is successfull")
     args = parser.parse_args()
 
     cred_path = os.path.join(os.environ["HOME"], ".EBI/ebi.ini")
