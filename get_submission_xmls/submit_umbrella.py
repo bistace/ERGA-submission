@@ -89,22 +89,23 @@ def read_credentials(filename=os.path.join(os.environ["HOME"], ".EBI/ebi.ini")):
     return account, password
 
 
-def generate_submission_xml():
+def generate_submission_xml(release=False):
     sub = ET.Element('SUBMISSION')
     actions = ET.SubElement(sub, 'ACTIONS')
     action = ET.SubElement(actions, 'ACTION')
     ET.SubElement(action, 'ADD')
-    action = ET.SubElement(actions, 'ACTION')
-    ET.SubElement(action, "HOLD", {"HoldUntilDate": datetime.now().strftime("%Y-%m-%d")})
+    if release:
+        action = ET.SubElement(actions, 'ACTION')
+        ET.SubElement(action, "HOLD", {"HoldUntilDate": datetime.now().strftime("%Y-%m-%d")})
 
     xml_string = minidom.parseString(ET.tostring(sub)).toprettyxml(indent="\t", encoding="utf-8")
     with open("submission.xml", 'wb') as xml_file:
         xml_file.write(xml_string)
 
 
-def submit_study(xml_path, test=True):
+def submit_study(xml_path, test=True, release=False):
     account, password = read_credentials()
-    generate_submission_xml()
+    generate_submission_xml(release)
 
     url = ""
     if test:
@@ -182,6 +183,7 @@ if __name__ == "__main__":
         "--submit", 
         dest="commit", action="store_true", required=False, 
         help="Do an actual submission if the test is successfull")
+    parser.add_argument("--release", dest="release", action="store_true", required=False, help="Set the study to public")
 
     args = parser.parse_args()
     root = minidom.Document()
@@ -241,4 +243,4 @@ if __name__ == "__main__":
     with open(save_path_file, "w") as f:
         f.write(xml_str)
 
-    submit_study(save_path_file, not args.commit)
+    submit_study(save_path_file, not args.commit, args.release)

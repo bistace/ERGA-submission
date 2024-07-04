@@ -15,6 +15,7 @@ help()
     echo "x    TaxID, can be found at the same place as the ToLID"
     echo "l    Optional. Locus tag to declare at the same time as the assembly"
     echo "s    Optional. If present, do an actual submission instead of a test one"
+    echo "r    Optional. If present, set the release to public"
     echo
 }
 
@@ -27,8 +28,9 @@ tolid=""
 taxid=""
 locus_tag="-"
 submit=false
+release=false
 
-while getopts "hp:n:t:x:l:s" flag
+while getopts "rhp:n:t:x:l:s" flag
 do
     case "${flag}" in
         h) 
@@ -53,6 +55,9 @@ do
         s)
             submit=true
             ;;
+        r)
+            release=true
+            ;;
         \?) 
             echo "Invalid option: -$OPTARG" >&2
             ;;
@@ -64,8 +69,14 @@ if [ "$submit" = true ] ; then
     submit_arg="--submit"
 fi
 
+
+release_arg=""
+if [ "$release" = true ] ; then
+    release_arg="--release"
+fi
+
 set -euo pipefail
 
-sequencing=$(submit_study.py -p $project -n "$name" -s "$name" -t $tolid -x $taxid -l ${locus_tag} --study-type sequencing ${submit_arg})
-assembly=$(submit_study.py -p $project -n "$name" -s "$name" -t $tolid -x $taxid -l ${locus_tag} --study-type assembly ${submit_arg})
-umbrella=$(submit_umbrella.py -p $project -n "$name" -s "$name" -t $tolid -x $taxid ${submit_arg} -a $sequencing $assembly)
+sequencing=$(submit_study.py -p $project -n "$name" -s "$name" -t $tolid -x $taxid -l ${locus_tag} --study-type sequencing ${submit_arg} ${release_arg})
+assembly=$(submit_study.py -p $project -n "$name" -s "$name" -t $tolid -x $taxid -l ${locus_tag} --study-type assembly ${submit_arg} ${release_arg})
+umbrella=$(submit_umbrella.py -p $project -n "$name" -s "$name" -t $tolid -x $taxid ${submit_arg} -a $sequencing $assembly ${release_arg})
