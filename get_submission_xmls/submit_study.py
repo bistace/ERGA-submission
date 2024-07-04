@@ -70,6 +70,9 @@ def get_studies(
             description_template = "bge_assembly_description.txt"
         elif project == "ATLASea":
             description_template = "atlasea_assembly_description.txt"
+            study_title = env.get_template("bge_assembly_title.txt").render(
+                species=species, tolid=tolid
+            )
         description = env.get_template(description_template).render(
             species=species,
             cname=cname,
@@ -100,6 +103,9 @@ def get_studies(
             description_template = "bge_data_description.txt"
         elif project == "ATLASea":
             description_template = "atlasea_data_description.txt"
+            study_title = env.get_template("bge_data_title.txt").render(
+                species=species, data=study_type
+            )
         else:
             description_template = "other_data_description.txt"
         study_register[tolid] = alias
