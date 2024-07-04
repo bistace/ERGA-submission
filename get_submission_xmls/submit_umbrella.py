@@ -130,10 +130,14 @@ def submit_study(xml_path, test=True):
         sys.exit(1)
     else:
         if test:
-            print("Test submission was successfull")
+            print("Test submission was successfull", file=sys.stderr)
         else:
-            print("Submission was successfull")
+            print("Submission was successfull", file=sys.stderr)
+            
     print("STDOUT: \n", out.decode("utf-8"), file=sys.stderr)
+    with open(xml_path.replace(".xml", ".receipt.xml"), "w") as fout:
+        print("STDOUT: \n", out.decode("utf-8"), file=fout)
+    
     print("STDERR: \n", err.decode("utf-8"), file=sys.stderr)
 
 

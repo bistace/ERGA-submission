@@ -70,6 +70,9 @@ def get_studies(
             description_template = "bge_assembly_description.txt"
         elif project == "ATLASea":
             description_template = "atlasea_assembly_description.txt"
+            alias = (
+                "atlasea-" + tolid + "_primary-" + datetime.now().strftime("%Y-%m-%d")
+            )
             study_title = env.get_template("bge_assembly_title.txt").render(
                 species=species, tolid=tolid
             )
@@ -103,9 +106,8 @@ def get_studies(
             description_template = "bge_data_description.txt"
         elif project == "ATLASea":
             description_template = "atlasea_data_description.txt"
-            study_title = env.get_template("bge_data_title.txt").render(
-                species=species, data=study_type
-            )
+            study_title = env.get_template("bge_data_title.txt").render(species=species)
+            alias = ("atlasea-" + tolid + "-study-rawdata-" + datetime.now().strftime("%Y-%m-%d"))
         else:
             description_template = "other_data_description.txt"
         study_register[tolid] = alias
@@ -225,10 +227,14 @@ def submit_study(xml_path, test=True):
         sys.exit(1)
 
     if test:
-        print("Test submission was successfull")
+        print("Test submission was successfull", file=sys.stderr)
     else:
-        print("Submission was successfull")
+        print("Submission was successfull", file=sys.stderr)
+
     print("STDOUT: \n", out.decode("utf-8"), file=sys.stderr)
+    with open(xml_path.replace(".xml", ".receipt.xml"), "w") as fout:
+        print("STDOUT: \n", out.decode("utf-8"), file=fout)
+        
     print("STDERR: \n", err.decode("utf-8"), file=sys.stderr)
 
 
