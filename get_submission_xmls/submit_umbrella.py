@@ -68,6 +68,12 @@ def get_xml(project, center, species, tolid_pref, description, children):
             accessions = get_attributes(
                 root, seqp, seqp, "CHILD_PROJECT", **{"accession": key}
             )
+        if args.project == "ERGA-BGE":
+            seqp = get_attributes(root, attributes, attributes, "RELATED_PROJECT")
+            accessions = get_attributes(
+                root, seqp, seqp, "PARENT_PROJECT", **{"accession": "PRJEB61747"}
+            )
+        
 
     if args.project == "CBP" or project == "EASI" or project == "ERGA-BGE":
         keyword = {}
@@ -103,7 +109,7 @@ def generate_submission_xml(release=False):
         xml_file.write(xml_string)
 
 
-def submit_study(xml_path, test=True, release=False):
+def submit_study(xml_path, test=True, release=False, project=None):
     account, password = read_credentials()
     generate_submission_xml(release)
 
