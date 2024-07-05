@@ -151,7 +151,7 @@ def submit_study(xml_path, test=True, release=False, project=None):
 
     print("STDOUT: \n", out.decode("utf-8"), file=sys.stderr)
     with open(xml_path.replace(".xml", ".receipt.xml"), "w") as fout:
-        print("STDOUT: \n", out.decode("utf-8"), file=fout)
+        print(out.decode("utf-8"), file=fout)
 
     print("STDERR: \n", err.decode("utf-8"), file=sys.stderr)
 
