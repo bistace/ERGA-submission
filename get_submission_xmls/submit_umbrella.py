@@ -73,6 +73,11 @@ def get_xml(project, center, species, tolid_pref, description, children):
             accessions = get_attributes(
                 root, seqp, seqp, "PARENT_PROJECT", **{"accession": "PRJEB61747"}
             )
+        elif args.project == "ERGA-pilot":
+            seqp = get_attributes(root, attributes, attributes, "RELATED_PROJECT")
+            accessions = get_attributes(
+                root, seqp, seqp, "PARENT_PROJECT", **{"accession": "PRJEB47820"}
+            )
         elif args.project == "ATLASea":
             seqp = get_attributes(root, attributes, attributes, "RELATED_PROJECT")
             accessions = get_attributes(
@@ -205,10 +210,10 @@ if __name__ == "__main__":
     if args.project == "ERGA-pilot":
         alias = args.name
         description_template = "pilot_umbrella_description.txt"
-        if not args.sample_ambassador:
-            exit("Required sample ambassador details for ERGA-pilot projects")
-        else:
-            sample_ambassador = args.sample_ambassador
+        # if not args.sample_ambassador:
+        #     exit("Required sample ambassador details for ERGA-pilot projects")
+        # else:
+        #     sample_ambassador = args.sample_ambassador
     elif args.project == "CBP":
         description_template = "cbp_umbrella_description.txt"
         alias = (

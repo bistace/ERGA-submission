@@ -60,6 +60,12 @@ def get_studies(
         )
         if project == "ERGA-pilot":
             description_template = "pilot_assembly_description.txt"
+            alias = (
+                "erga-pilot-" + tolid + "_primary-" + datetime.now().strftime("%Y-%m-%d")
+            )
+            study_title = env.get_template("bge_assembly_title.txt").render(
+                species=species, tolid=tolid
+            )
         elif project == "ERGA-BGE":
             alias = (
                 "erga-bge-" + tolid + "_primary-" + datetime.now().strftime("%Y-%m-%d")
@@ -93,6 +99,12 @@ def get_studies(
         )
         if project == "ERGA-pilot":
             description_template = "pilot_data_description.txt"
+            alias = (
+                "erga-pilot-" + tolid + "-study-rawdata-" + datetime.now().strftime("%Y-%m-%d")
+            )
+            study_title = env.get_template("bge_data_title.txt").render(
+                species=species, data=study_type
+            )
         elif project == "ERGA-BGE":
             alias = (
                 "erga-bge-"
@@ -263,6 +275,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--sample-ambassador",
         required=False,
+        default=None,
         help="Sample ambassador (only for ERGA-pilot projects)",
     )
     parser.add_argument("-t", "--tolid", required=True, help="tolid")

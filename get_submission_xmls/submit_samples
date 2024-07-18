@@ -1,0 +1,228 @@
+#!/usr/bin/env python3
+
+import pandas as pd
+import argparse
+import re
+import sys
+import requests
+import subprocess
+import configparser
+import xml.etree.ElementTree as ET
+from xml.dom import minidom
+import os
+from pathlib import Path
+
+# Retrieve the ERC field in the tabular file
+def search_and_print_erc(file_path, separator):
+    with open(file_path, 'r') as file:
+        first_line = file.readline().strip().split(separator)
+        if first_line[0] == 'Checklist' and len(first_line) > 1:
+            return first_line[1]
+    return None
+
+# Extract the mandatory fields from the ENA checklist
+def mandatory_fields_and_units(checklist_accession, mandatory_fields, fields_with_units, recommended_fields):
+    # URL to download the sample checklist XML from ENA
+    url = f"https://www.ebi.ac.uk/ena/browser/api/xml/{checklist_accession}"
+
+    try:
+        # Download the XML file
+        response = requests.get(url)
+        response.raise_for_status()
+    except requests.exceptions.RequestException as e:
+        print(f"Unknown ENA checklist {checklist_accession} => Error downloading XML file: {e}", file=sys.stderr)
+        exit(1)
+
+    # Parse the XML content
+    root = ET.fromstring(response.content)
+
+    # Extract name of the checklist
+    desc = root.find(".//DESCRIPTOR")
+    name = desc.find("NAME").text
+
+    # Extract mandatory fields
+    for field in root.findall(".//FIELD"):
+        field_name = field.find("NAME").text
+
+        units_element = field.find("UNITS")
+        if units_element is not None:
+            unit_element = units_element.find("UNIT")
+            unit_value = unit_element.text if unit_element is not None else None
+            fields_with_units[field_name] = unit_value
+        
+        is_mandatory = field.find("MANDATORY").text == 'mandatory'
+        if is_mandatory:
+            mandatory_fields.append(field_name)
+        is_recommended = field.find("MANDATORY").text == 'recommended'
+        if is_recommended:
+            recommended_fields.append(field_name)
+    
+    return name
+
+# Add an attribute to the attributes tag of the xml
+def add_attribute(attributes, _tag, _value, _fields_with_units):
+    if str(_value) != "nan" and str(_value) != "" and not str(_value).isspace():
+        attribute = ET.SubElement(attributes, 'SAMPLE_ATTRIBUTE')
+        tag = ET.SubElement(attribute, 'TAG')
+        tag.text = _tag
+        value_elem = ET.SubElement(attribute, 'VALUE')
+        value_elem.text = str(_value)
+        if _tag in _fields_with_units:
+            units = ET.SubElement(attribute, 'UNITS')
+            units.text = str(_fields_with_units[_tag])
+
+# Generate the xml file for the submission
+def generate_sub_xml(sub_xml):
+    sub = ET.Element('SUBMISSION')
+    actions = ET.SubElement(sub, 'ACTIONS')
+    action = ET.SubElement(actions, 'ACTION')
+    ET.SubElement(action, 'ADD')
+    
+    xml_string = minidom.parseString(ET.tostring(sub)).toprettyxml(indent="  ", encoding="utf-8")
+    # Save the XML to a file
+    with open(sub_xml, 'wb') as xml_file:
+        xml_file.write(xml_string)
+
+# Get information about the EBI account
+def read_credentials():
+    home = Path.home()
+    credentials_file = home / '.EBI' / 'ebi.ini'
+
+    if not credentials_file.exists():
+        print(f"Error: Credentials file {credentials_file} not found.", file=sys.stderr)
+        exit(1)
+
+    config = configparser.ConfigParser()
+    config.read(credentials_file)
+    account = config.get('Credentials', 'account')
+    password = config.get('Credentials', 'password')
+    return account, password
+
+# Send the file on the EBI test server and print the result
+def test_ebi(submission, samples):
+    # Set up the authentication for the HTTP request
+    account, password = read_credentials()
+    
+    # Replace this with your actual curl command
+    curl_command = f'curl -u \'{account}:{password}\' -F \"SUBMISSION=@{submission}\" -F \"SAMPLE=@{samples}\" https://wwwdev.ebi.ac.uk/ena/submit/drop-box/submit/'
+    print(f" => Test at EBI : {curl_command}", file=sys.stderr)
+    # Run the curl command
+    try:
+        result = subprocess.run(curl_command, shell=True, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        print("=============== EBI's response =================\n", result.stdout.decode('utf-8'), "\n==============================================")
+    except subprocess.CalledProcessError as e:
+        print(f"Error running curl command: {e}", file=sys.stderr)
+        print("STDERR:", e.stderr.decode('utf-8'), file=sys.stderr)
+
+# Create an argument parser
+parser = argparse.ArgumentParser(description="""Generate an xml file to submit samples at the ENA from a csv file.
+                                 The checklist can be given as an argument or overload in the tabular file (in a line starting with 'Checklist').
+                                 The center name can be given as an argument or overload in a column of the tabular file.
+                                 
+                                 The program can be used to obtain information on a checklist with the following command line:
+                                 create_ENA_samplexml.py -file /dev/null -erc ERC000043"""
+                                )
+
+# Add command-line arguments
+parser.add_argument('-file', help='Tabular file that contains the metadata associated with samples', required=True)
+parser.add_argument('-out', help='Output directory where to store the xml files (samples.xml and submission.xml). Default is /tmp/ and . for current directory', required=False, default='/tmp/')
+parser.add_argument('-fs', help='Field separator in the input tabular file, default is ;', required=False, default=';')
+parser.add_argument('-erc', help='ERC checklist, default is ERC000011; see https://www.ebi.ac.uk/ena/browser/checklists', required=False, default='ERC000011')
+parser.add_argument('-center', help='Center name that will appear in the sample.xml, Default is Genoscope', required=False, default='Genoscope')
+parser.add_argument('-mapping', help='CSV file containing the mapping between CSV headers and XML fields', required=False)
+args = parser.parse_args()
+samples_xml = args.out + '/samples.xml'
+sub_xml = args.out + '/submission.xml'
+
+# Extract the ERC code from the first line
+erc = args.erc
+a = search_and_print_erc(args.file, args.fs)
+if a is not None:
+    erc = a
+print(f" => ERC checklist is {erc}", file=sys.stderr)
+
+# Read the mapping file if provided
+mapping_dict = {}
+if args.mapping:
+    try:
+        mapping_df = pd.read_csv(args.mapping, sep=';')
+        mapping_dict = pd.Series(mapping_df['XML Field'].values, index=mapping_df['CSV Header']).to_dict()
+        print("Mapping dictionary loaded:", mapping_dict, file=sys.stderr)  # Debug print
+    except Exception as err:
+        print(f'Error: Mapping file {args.mapping} not found or empty : {err=}', file=sys.stderr)
+        exit(1)
+
+# Download and extract mandatory fields
+mandatory_fields = []
+fields_with_units = {}
+recommended_fields = []
+CL_name = mandatory_fields_and_units(erc, mandatory_fields, fields_with_units, recommended_fields)
+print(f" => Sample checklist is {erc} : {CL_name}", file=sys.stderr)
+if mandatory_fields:
+    print(f" => Mandatory Fields:", ', '.join(mandatory_fields), file=sys.stderr)
+else:
+    print(f" => No mandatory fields found for checklist {erc}.", file=sys.stderr)
+if recommended_fields:
+    print(f" => Recommended Fields:", ', '.join(recommended_fields), file=sys.stderr)
+else:
+    print(f" => No recommended fields found for checklist {erc}.", file=sys.stderr)
+if fields_with_units:
+    print(" => Fields with Units:", ', '.join(f"{field}: {unit}" for field, unit in fields_with_units.items()), file=sys.stderr)
+else:
+    print(" => No fields with units found for the given checklist.", file=sys.stderr)
+
+# Read the text file into a DataFrame, using the second line as the header
+try:
+    df = pd.read_csv(args.file, sep=args.fs, skiprows=[0])
+    print("DataFrame loaded with columns:", df.columns, file=sys.stderr)  # Debug print
+except Exception as err:
+    print(f'Error: File {args.file} not found or empty : {err=}', file=sys.stderr)
+    exit(1)
+
+# If a mapping file is provided, update the columns in the DataFrame with the mapping
+if mapping_dict:
+    df.rename(columns=mapping_dict, inplace=True)
+    print("DataFrame columns after applying mapping:", df.columns, file=sys.stderr)  # Debug print
+
+# Check if mandatory fields are present in the tabular file using the mapping
+for xml_field in mandatory_fields:
+    if xml_field not in df.columns:
+        print(f'Error: {xml_field} field is not present in the DataFrame.', file=sys.stderr)
+        exit(1)
+
+# Check for additional required fields
+required_fields = ['tax id', 'sample title', 'sample alias', 'scientific name']
+for field in required_fields:
+    if field not in df.columns:
+        print(f'Error: {field} column is not present in the DataFrame.', file=sys.stderr)
+        exit(1)
+
+# Build the sample xml file
+samples = ET.Element('SAMPLE_SET')
+for i in df.index:
+    center_name = args.center
+    if 'center name' in df.columns:
+        center_name = df['center name'][i]
+    sample = ET.SubElement(samples, 'SAMPLE', alias=df['sample alias'][i], center_name=center_name)
+    ET.SubElement(sample, 'TITLE').text = df['sample title'][i]
+    sample_name = ET.SubElement(sample, 'SAMPLE_NAME')
+    ET.SubElement(sample_name, 'TAXON_ID').text = str(df['tax id'][i])
+    ET.SubElement(sample_name, 'SCIENTIFIC_NAME').text = df['scientific name'][i]
+    if 'common_name' in df.columns:
+        ET.SubElement(sample_name, 'COMMON_NAME').text = df['common name'][i]
+    row = df.iloc[i]
+    attributes = ET.SubElement(sample, 'SAMPLE_ATTRIBUTES')
+    add_attribute(attributes, "ENA-CHECKLIST", erc, fields_with_units)
+    for col, value in row.items():
+        if col not in required_fields:
+            add_attribute(attributes, col, value, fields_with_units)
+
+# Create a prettified XML string
+xml_string = minidom.parseString(ET.tostring(samples)).toprettyxml(indent="  ", encoding="utf-8")
+
+# Save the XML to a file
+with open(samples_xml, 'wb') as xml_file:
+    xml_file.write(xml_string)
+
+generate_sub_xml(sub_xml)
+test_ebi(sub_xml, samples_xml)
