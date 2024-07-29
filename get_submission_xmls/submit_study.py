@@ -82,6 +82,14 @@ def get_studies(
             study_title = env.get_template("bge_assembly_title.txt").render(
                 species=species, tolid=tolid
             )
+        elif project == "other":
+            description_template = "other_assembly_description.txt"
+            alias = (
+                tolid + "_primary-" + datetime.now().strftime("%Y-%m-%d")
+            )
+            study_title = env.get_template("other_assembly_title.txt").render(
+                species=species, tolid=tolid
+            )
         description = env.get_template(description_template).render(
             species=species,
             cname=cname,
@@ -120,8 +128,10 @@ def get_studies(
             description_template = "atlasea_data_description.txt"
             study_title = env.get_template("bge_data_title.txt").render(species=species)
             alias = ("atlasea-" + tolid + "-study-rawdata-" + datetime.now().strftime("%Y-%m-%d"))
-        else:
+        elif project == "other":
             description_template = "other_data_description.txt"
+            study_title = env.get_template("other_data_title.txt").render(species=species)
+            alias = (tolid + "-study-rawdata-" + datetime.now().strftime("%Y-%m-%d"))
         study_register[tolid] = alias
         description = env.get_template(description_template).render(
             species=species,
@@ -300,10 +310,7 @@ if __name__ == "__main__":
     cred_path = os.path.join(os.environ["HOME"], ".EBI/ebi.ini")
     if not os.path.exists(cred_path):
         print(f"ERROR: credentials not found at path '{cred_path}'")
-
-    cred_path = os.path.join(os.environ["HOME"], ".EBI/ebi.ini")
-    if not os.path.exists(cred_path):
-        print(f"ERROR: credentials not found at path '{cred_path}'")
+        exit(1)
 
     root = {}
     root["study"] = minidom.Document()

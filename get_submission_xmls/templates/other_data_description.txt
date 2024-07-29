@@ -1,1 +1,1 @@
-This project collects the {{data}} generated for {{species}}, {{cname}}.
+This project collects the genomic and transcriptomic generated for {{species}} to facilitate genome assembly and annotation.
