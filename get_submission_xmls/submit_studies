@@ -13,6 +13,7 @@ help()
     echo "n    Scientific species name between quotes"
     echo "t    ToLID, can be found here: https://id.tol.sanger.ac.uk/"
     echo "x    TaxID, can be found at the same place as the ToLID"
+    echo "a    Optional. Also submit a study for the alternate haplotype."
     echo "l    Optional. Locus tag to declare at the same time as the assembly"
     echo "s    Optional. If present, do an actual submission instead of a test one"
     echo "r    Optional. If present, set the release to public"
@@ -27,6 +28,7 @@ name=""
 tolid=""
 taxid=""
 locus_tag="-"
+alternate=false
 submit=false
 release=false
 
@@ -48,6 +50,9 @@ do
             ;;
         x) 
             taxid=${OPTARG}
+            ;;
+        a)
+            alternate=true
             ;;
         l)
             locus_tag=${OPTARG}
@@ -79,4 +84,9 @@ set -euo pipefail
 
 sequencing=$(submit_study.py -p $project -n "$name" -s "$name" -t $tolid -x $taxid -l ${locus_tag} --study-type sequencing ${submit_arg} ${release_arg})
 assembly=$(submit_study.py -p $project -n "$name" -s "$name" -t $tolid -x $taxid -l ${locus_tag} --study-type assembly ${submit_arg} ${release_arg})
-umbrella=$(submit_umbrella.py -p $project -n "$name" -s "$name" -t $tolid -x $taxid ${submit_arg} -a $sequencing $assembly ${release_arg})
+
+alternate_id = ""
+if [ "$alternate" = true ] ; then
+    alternate_id=$(submit_study.py -p $project -n "$name" -s "$name" -t $tolid -x $taxid -l ${locus_tag} --study-type alternate ${submit_arg} ${release_arg})
+
+umbrella=$(submit_umbrella.py -p $project -n "$name" -s "$name" -t $tolid -x $taxid ${submit_arg} -a $sequencing $assembly ${alternate_id} ${release_arg})

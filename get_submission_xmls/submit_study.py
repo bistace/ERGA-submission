@@ -44,12 +44,15 @@ def get_studies(
     sample_coordinator,
     study_type,
     locus_tag,
+    parent
 ):
     study_title = ""
     if study_type == "assembly":
         study_title = "Genome assembly of " + species
     elif study_type == "sequencing":
         study_title = "Sequencing data of " + species
+    elif study_type == "alternate":
+        study_title = "Genome assembly of " + species + ", alternate haplotype"
 
     description = ""
     study_name = tolid
@@ -86,6 +89,48 @@ def get_studies(
             description_template = "other_assembly_description.txt"
             alias = (
                 tolid + "_primary-" + datetime.now().strftime("%Y-%m-%d")
+            )
+            study_title = env.get_template("other_assembly_title.txt").render(
+                species=species, tolid=tolid
+            )
+        description = env.get_template(description_template).render(
+            species=species,
+            cname=cname,
+            sample_coordinator=sample_coordinator,
+        )
+    elif study_type == "alternate":
+        alias = cname.replace(" ", "_") + "_genome_assembly"
+        study_title = env.get_template("bge_alternate_assembly_title.txt").render(
+            species=species, cname=cname, tolid=tolid
+        )
+        if project == "ERGA-pilot":
+            description_template = "pilot_assembly_description.txt"
+            alias = (
+                "erga-pilot-" + tolid + "_alternate-" + datetime.now().strftime("%Y-%m-%d")
+            )
+            study_title = env.get_template("bge_alternate_assembly_title.txt").render(
+                species=species, tolid=tolid
+            )
+        elif project == "ERGA-BGE":
+            alias = (
+                "erga-bge-" + tolid + "_alternate-" + datetime.now().strftime("%Y-%m-%d")
+            )
+            study_title = env.get_template("bge_alternate_assembly_title.txt").render(
+                species=species, tolid=tolid
+            )
+            description_template = "bge_assembly_description.txt"
+        elif project == "ATLASea":
+            description_template = "atlasea_assembly_description.txt"
+            alias = (
+                "atlasea-" + tolid + "_alternate-" + datetime.now().strftime("%Y-%m-%d")
+            )
+            study_title = env.get_template("bge_alternate_assembly_title.txt").render(
+                species=species, tolid=tolid
+            )
+        elif project == "other":
+            description_template = "other_assembly_description.txt"
+            alias = (
+                tolid + "_alternate-" + datetime.now().strftime("%Y-%m-%d")
             )
             study_title = env.get_template("other_assembly_title.txt").render(
                 species=species, tolid=tolid
@@ -149,11 +194,12 @@ def get_studies(
         description,
         study_type,
         locus_tag,
+        parent
     )
 
 
 def get_study_xml(
-    project, center, alias, study_name, study_title, description, study_type, locus_tag
+    project, center, alias, study_name, study_title, description, study_type, locus_tag, parent
 ):
 
     projects = ""
@@ -197,6 +243,13 @@ def get_study_xml(
         )
         study_attr = get_attributes(
             root["study"], attributes, study_attr, "PROJECT_ATTRIBUTE", **keyword
+        )
+
+    if parent:
+        attributes = get_attributes(root["study"], projects, attributes, "RELATED_PROJECTS")
+        seqp = get_attributes(root["study"], attributes, attributes, "RELATED_PROJECT")
+        accessions = get_attributes(
+            root["study"], seqp, seqp, "PARENT_PROJECT", **{"accession": parent}
         )
 
 
@@ -300,9 +353,10 @@ if __name__ == "__main__":
     parser.add_argument(
         "--study-type",
         required=True,
-        choices=["assembly", "sequencing"],
+        choices=["assembly", "sequencing", "alternate"],
         help="Study type",
     )
+    parser.add_argument("-u", "--umbrella", dest="umbrella", action="store", required=False, help="Umbrella project to attach to")
     parser.add_argument("--submit", dest="commit", action="store_true", required=False, help="Do an actual submission if the test is successfull")
     parser.add_argument("--release", dest="release", action="store_true", required=False, help="Set the study to public")
     args = parser.parse_args()
@@ -335,6 +389,7 @@ if __name__ == "__main__":
         sample_coordinator,
         study_type,
         locus_tag,
+        args.umbrella
     )
 
     save_path = ""
