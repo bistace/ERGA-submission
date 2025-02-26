@@ -1,6 +1,5 @@
 #!/usr/bin/bash
 
-
 help() 
 {
     echo
@@ -82,11 +81,12 @@ fi
 
 set -euo pipefail
 
-sequencing=$(submit_study.py -p $project -n "$name" -s "$name" -t $tolid -x $taxid -l ${locus_tag} --study-type sequencing ${submit_arg} ${release_arg})
-assembly=$(submit_study.py -p $project -n "$name" -s "$name" -t $tolid -x $taxid -l ${locus_tag} --study-type assembly ${submit_arg} ${release_arg})
+sequencing=$(submit_study -p $project -n "$name" -s "$name" -t $tolid -x $taxid -l ${locus_tag} --study-type sequencing ${submit_arg} ${release_arg})
+assembly=$(submit_study -p $project -n "$name" -s "$name" -t $tolid -x $taxid -l ${locus_tag} --study-type assembly ${submit_arg} ${release_arg})
 
-alternate_id = ""
+alternate_id=""
 if [ "$alternate" = true ] ; then
-    alternate_id=$(submit_study.py -p $project -n "$name" -s "$name" -t $tolid -x $taxid -l ${locus_tag} --study-type alternate ${submit_arg} ${release_arg})
+    alternate_id=$(submit_study -p $project -n "$name" -s "$name" -t $tolid -x $taxid -l ${locus_tag} --study-type alternate ${submit_arg} ${release_arg})
+fi
 
-umbrella=$(submit_umbrella.py -p $project -n "$name" -s "$name" -t $tolid -x $taxid ${submit_arg} -a $sequencing $assembly ${alternate_id} ${release_arg})
+umbrella=$(submit_umbrella -p $project -n "$name" -s "$name" -t $tolid -x $taxid ${submit_arg} -a $sequencing $assembly ${alternate_id} ${release_arg})

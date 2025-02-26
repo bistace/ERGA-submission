@@ -363,7 +363,7 @@ if __name__ == "__main__":
 
     cred_path = os.path.join(os.environ["HOME"], ".EBI/ebi.ini")
     if not os.path.exists(cred_path):
-        print(f"ERROR: credentials not found at path '{cred_path}'")
+        print(f"ERROR: credentials not found at path '{cred_path}'", file=sys.stderr)
         exit(1)
 
     root = {}
