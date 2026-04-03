@@ -10,6 +10,7 @@ pip install --prefix . --ignore-installed -r requirements.txt
 
 mkdir -p bin
 cd bin
+ln -s ../get_submission_xmls/submit_genome.py
 ln -s ../get_submission_xmls/submit_study.py
 ln -s ../get_submission_xmls/submit_umbrella.py
 ln -s ../get_submission_xmls/submit_studies

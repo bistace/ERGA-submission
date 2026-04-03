@@ -1,18 +1,22 @@
 #!/usr/bin/env python3
 import argparse
 import configparser
+import ngs_workflow.env
+import ngl.analyses
 import os
 import subprocess
 import sys
 
-import requests
+
+os.environ["CONFFILE"] = "/env/atelier/ngs_ba/cns/conf/ngljoe_ba.conf"
+ngs_workflow.env.load_conf_file()
 
 
 def read_credentials(filename=os.path.join(os.environ["HOME"], ".EBI/ebi.ini")):
     config = configparser.ConfigParser()
     config.read(filename)
-    account = config.get('Credentials', 'account')
-    password = config.get('Credentials', 'password')
+    account = config.get("Credentials", "account")
+    password = config.get("Credentials", "password")
     return account, password
 
 
@@ -49,7 +53,8 @@ def main():
     account, password = read_credentials(cred_path)
     webin_cli_jar = download_webin_cli()
 
-    submit_genome(webin_cli_jar, args.manifest, account, password)
+    # submit_genome(webin_cli_jar, args.manifest, account, password)
+    update_ngl(args.project, args.material, assembly_name)
 
 
 # --- Manifest parsing ---
@@ -86,16 +91,7 @@ def extract_manifest_fields(manifest):
 
 def get_assembly_json(project_code: str, material_code: str) -> dict:
     """Fetch assembly data from the NGL-BI API."""
-    headers = {"User-Agent": "bot"}
-    ngl_url = f"http://ngl-bi.genoscope.cns.fr/api/analyses/BA.{project_code}_{material_code}"
-
-    res = requests.get(ngl_url, headers=headers)
-    if res.status_code == 404:
-        print(f"ERROR: Project {project_code}/{material_code} has no assembly treatment!", file=sys.stderr)
-        return None
-
-    res.raise_for_status()
-    return res.json()
+    return ngl.get_from_bi(f"analyses/BA.{project_code}_{material_code}")
 
 
 def extract_ngl_fields(assembly):
@@ -115,17 +111,30 @@ def extract_ngl_fields(assembly):
     return ngl_study, ngl_tolid
 
 
+def update_ngl(project_code: str, material_code: str, assembly_name: str):
+    """Update assembly name and downloaded from NCBI checkbox"""
+    code = f"BA.{project_code}_{material_code}"
+    ngl.analyses.update_downloaded_from_ncbi(code, False)
+    ngl.analyses.update_assembly_to_download_version(code, assembly_name)
+
+
 # --- Validation ---
 
 
 def validate(study, assembly_name, ngl_study, ngl_tolid):
     """Validate that manifest fields match NGL-BI data."""
     if ngl_study != study:
-        print(f"ERROR: STUDY mismatch: manifest has '{study}' but NGL-BI has '{ngl_study}'", file=sys.stderr)
+        print(
+            f"ERROR: STUDY mismatch: manifest has '{study}' but NGL-BI has '{ngl_study}'",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
     if not assembly_name.startswith(ngl_tolid):
-        print(f"ERROR: ASSEMBLYNAME '{assembly_name}' does not contain tolid '{ngl_tolid}'", file=sys.stderr)
+        print(
+            f"ERROR: ASSEMBLYNAME '{assembly_name}' does not contain tolid '{ngl_tolid}'",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
 
@@ -171,11 +180,17 @@ def download_webin_cli(dest_dir="/tmp"):
 def submit_genome(webin_cli_jar, manifest_path, account, password):
     """Submit a genome to the ENA using webin-cli."""
     cmd = [
-        "java", "-jar", webin_cli_jar,
-        "-manifest", manifest_path,
-        "-context", "genome",
-        "-userName", account,
-        "-password", password,
+        "java",
+        "-jar",
+        webin_cli_jar,
+        "-manifest",
+        manifest_path,
+        "-context",
+        "genome",
+        "-userName",
+        account,
+        "-password",
+        password,
         "-submit",
         "-ascp",
     ]
