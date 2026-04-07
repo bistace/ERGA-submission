@@ -7,6 +7,7 @@ import os
 import requests
 import subprocess
 import sys
+import tempfile
 import xml.etree.ElementTree as ET
 
 
@@ -63,9 +64,13 @@ def main():
 
     account, password = read_credentials(cred_path)
     webin_cli_jar = download_webin_cli()
-
-    # submit_genome(webin_cli_jar, args.manifest, account, password)
-    # update_ngl(args.project, args.material, assembly_name)
+    try:
+        # submit_genome(webin_cli_jar, args.manifest, account, password)
+        # update_ngl(args.project, args.material, assembly_name)
+        pass
+    finally:
+        if os.path.exists(webin_cli_jar):
+            os.remove(webin_cli_jar)
 
 
 # --- Manifest parsing ---
@@ -213,8 +218,8 @@ def validate(study, assembly_name, taxid, ngl_study, ngl_tolid, ngl_taxid):
 # --- Webin CLI ---
 
 
-def download_webin_cli(dest_dir="/tmp"):
-    """Download the latest webin-cli JAR from GitHub into dest_dir."""
+def download_webin_cli():
+    """Download the latest webin-cli JAR from GitHub to a unique temp path."""
     api_url = "https://api.github.com/repos/enasequence/webin-cli/releases/latest"
     res = requests.get(api_url)
     res.raise_for_status()
@@ -230,12 +235,10 @@ def download_webin_cli(dest_dir="/tmp"):
         print("ERROR: no JAR asset found in the latest webin-cli release", file=sys.stderr)
         sys.exit(1)
 
-    jar_path = os.path.join(dest_dir, jar_asset["name"])
-    if os.path.exists(jar_path):
-        print(f"webin-cli already present at {jar_path}", file=sys.stderr)
-        return jar_path
+    fd, jar_path = tempfile.mkstemp(prefix="webin-cli-", suffix=".jar")
+    os.close(fd)
 
-    print(f"Downloading {jar_asset['name']} ...", file=sys.stderr)
+    print(f"Downloading {jar_asset['name']} to {jar_path} ...", file=sys.stderr)
     download = requests.get(jar_asset["browser_download_url"], stream=True)
     download.raise_for_status()
     with open(jar_path, "wb") as f:
