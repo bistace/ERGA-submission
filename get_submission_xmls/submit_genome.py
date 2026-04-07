@@ -4,8 +4,10 @@ import configparser
 import ngs_workflow.env
 import ngl.analyses
 import os
+import requests
 import subprocess
 import sys
+import xml.etree.ElementTree as ET
 
 
 os.environ["CONFFILE"] = "/env/atelier/ngs_ba/cns/conf/prod_ba.conf"
@@ -31,7 +33,7 @@ def main():
     args = parser.parse_args()
 
     manifest = parse_manifest(args.manifest)
-    study, assembly_name = extract_manifest_fields(manifest)
+    study, sample, assembly_name = extract_manifest_fields(manifest)
 
     assembly = get_assembly_json(args.project, args.material)
     if assembly is None:
@@ -40,10 +42,14 @@ def main():
     ngl_study, ngl_tolid = extract_ngl_fields(assembly)
     validate(study, assembly_name, ngl_study, ngl_tolid)
 
+    ebi_taxid = get_sample_taxid(sample)
+
     print(f"Manifest study: {study}")
     print(f"NGL-BI study:   {ngl_study}")
     print(f"Manifest assembly name: {assembly_name}")
     print(f"NGL-BI ToLID:           {ngl_tolid}")
+    print(f"Manifest sample: {sample}")
+    print(f"EBI taxid:       {ebi_taxid}")
 
     cred_path = os.path.join(os.environ["HOME"], ".EBI/ebi.ini")
     if not os.path.exists(cred_path):
@@ -74,16 +80,20 @@ def parse_manifest(path):
 def extract_manifest_fields(manifest):
     """Extract and validate required fields from a parsed manifest."""
     study = manifest.get("STUDY")
+    sample = manifest.get("SAMPLE")
     assembly_name = manifest.get("ASSEMBLYNAME")
 
     if not study:
         print("ERROR: STUDY field not found in manifest", file=sys.stderr)
         sys.exit(1)
+    if not sample:
+        print("ERROR: SAMPLE field not found in manifest", file=sys.stderr)
+        sys.exit(1)
     if not assembly_name:
         print("ERROR: ASSEMBLYNAME field not found in manifest", file=sys.stderr)
         sys.exit(1)
 
-    return study, assembly_name
+    return study, sample, assembly_name
 
 
 # --- NGL-BI API ---
@@ -116,6 +126,27 @@ def update_ngl(project_code: str, material_code: str, assembly_name: str):
     code = f"BA.{project_code}_{material_code}"
     ngl.analyses.update_downloaded_from_ncbi(code, False)
     ngl.analyses.update_assembly_to_download_version(code, assembly_name)
+
+
+# --- EBI API ---
+
+
+def get_sample_taxid(sample_accession: str) -> str:
+    """Fetch the taxid for a given sample accession from the ENA browser API."""
+    url = f"https://www.ebi.ac.uk/ena/browser/api/xml/{sample_accession}?download=true&includeLinks=false"
+    response = requests.get(url)
+    response.raise_for_status()
+
+    root = ET.fromstring(response.content)
+    taxon_id_elem = root.find(".//SAMPLE_NAME/TAXON_ID")
+    if taxon_id_elem is None or not taxon_id_elem.text:
+        print(
+            f"ERROR: TAXON_ID not found in EBI XML for sample '{sample_accession}'",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    return taxon_id_elem.text
 
 
 # --- Validation ---
