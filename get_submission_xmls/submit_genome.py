@@ -106,21 +106,41 @@ def extract_manifest_fields(manifest):
 
 def get_assembly_json(project_code: str, material_code: str) -> dict:
     """Fetch assembly data from the NGL-BI API."""
-    return ngl.get_from_bi(f"analyses/BA.{project_code}_{material_code}")
+    headers = {"User-Agent": "bot"}
+    url = f"http://ngl-bi.genoscope.cns.fr/api/analyses/BA.{project_code}_{material_code}"
+    res = requests.get(url, headers=headers)
+    if res.status_code == 404:
+        print(
+            f"ERROR: Project {project_code}/{material_code} has no assembly treatment!",
+            file=sys.stderr,
+        )
+        return None
+    res.raise_for_status()
+    return res.json()
 
 
 def get_sample_json(project_code: str, material_code: str) -> dict:
     """Fetch sample data from the NGL-BI API."""
-    return ngl.get_from_bi(f"samples/{project_code}_{material_code}")
+    headers = {"User-Agent": "bot"}
+    url = f"http://ngl-bi.genoscope.cns.fr/api/samples/{project_code}_{material_code}"
+    res = requests.get(url, headers=headers)
+    if res.status_code == 404:
+        print(
+            f"ERROR: Sample {project_code}_{material_code} not found in NGL-BI!",
+            file=sys.stderr,
+        )
+        return None
+    res.raise_for_status()
+    return res.json()
 
 
 def extract_ngl_fields(assembly, sample):
     """Extract study accession, tolid and taxid from an NGL-BI assembly response."""
-    assembly_properties = assembly.get("assembly_properties", {})
-    taxon_code = sample.get("taxon_code", {})
+    properties = assembly.get("properties", {})
 
-    ngl_study = assembly_properties.get("primaryAssemblyProjectAccession", {}).get("value")
-    ngl_tolid = assembly_properties.get("tolid", {}).get("value")
+    ngl_study = properties.get("primaryAssemblyProjectAccession", {}).get("value")
+    ngl_tolid = properties.get("tolid", {}).get("value")
+    ngl_taxid = sample.get("taxonCode")
 
     if not ngl_study:
         print("ERROR: primaryAssemblyProjectAccession not found in NGL-BI", file=sys.stderr)
@@ -128,11 +148,11 @@ def extract_ngl_fields(assembly, sample):
     if not ngl_tolid:
         print("ERROR: tolid not found in NGL-BI", file=sys.stderr)
         sys.exit(1)
-    if not taxon_code:
-        print("ERROR: taxon_code not found in NGL-BI", file=sys.stderr)
+    if not ngl_taxid:
+        print("ERROR: taxonCode not found in NGL-BI", file=sys.stderr)
         sys.exit(1)
 
-    return ngl_study, ngl_tolid, taxon_code
+    return ngl_study, ngl_tolid, ngl_taxid
 
 
 def update_ngl(project_code: str, material_code: str, assembly_name: str):
@@ -182,7 +202,7 @@ def validate(study, assembly_name, taxid, ngl_study, ngl_tolid, ngl_taxid):
         )
         sys.exit(1)
 
-    if not taxid != ngl_taxid:
+    if taxid != ngl_taxid:
         print(
             f"ERROR: TAXID mismatch: sample has '{taxid}' but NGL-BI has '{ngl_taxid}'",
             file=sys.stderr,
