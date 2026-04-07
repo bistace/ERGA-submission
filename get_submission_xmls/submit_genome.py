@@ -39,10 +39,9 @@ def main():
     if assembly is None:
         sys.exit(1)
 
-    ngl_study, ngl_tolid = extract_ngl_fields(assembly)
-    validate(study, assembly_name, ngl_study, ngl_tolid)
-
     ebi_taxid = get_sample_taxid(sample)
+    ngl_study, ngl_tolid, ngl_taxid = extract_ngl_fields(assembly)
+    validate(study, assembly_name, ebi_taxid, ngl_study, ngl_tolid, ngl_taxid)
 
     print(f"Manifest study: {study}")
     print(f"NGL-BI study:   {ngl_study}")
@@ -50,6 +49,7 @@ def main():
     print(f"NGL-BI ToLID:           {ngl_tolid}")
     print(f"Manifest sample: {sample}")
     print(f"EBI taxid:       {ebi_taxid}")
+    print(f"NGL taxid:       {ngl_taxid}")
 
     cred_path = os.path.join(os.environ["HOME"], ".EBI/ebi.ini")
     if not os.path.exists(cred_path):
@@ -104,12 +104,18 @@ def get_assembly_json(project_code: str, material_code: str) -> dict:
     return ngl.get_from_bi(f"analyses/BA.{project_code}_{material_code}")
 
 
-def extract_ngl_fields(assembly):
-    """Extract study accession and tolid from an NGL-BI assembly response."""
-    properties = assembly.get("properties", {})
+def get_sample_json(project_code: str, material_code: str) -> dict:
+    """Fetch sample data from the NGL-BI API."""
+    return ngl.get_from_bi(f"samples/{project_code}_{material_code}")
 
-    ngl_study = properties.get("primaryAssemblyProjectAccession", {}).get("value")
-    ngl_tolid = properties.get("tolid", {}).get("value")
+
+def extract_ngl_fields(assembly):
+    """Extract study accession, tolid and taxid from an NGL-BI assembly response."""
+    assembly_properties = assembly.get("assembly_properties", {})
+    taxon_code = assembly.get("taxon_code", {})
+
+    ngl_study = assembly_properties.get("primaryAssemblyProjectAccession", {}).get("value")
+    ngl_tolid = assembly_properties.get("tolid", {}).get("value")
 
     if not ngl_study:
         print("ERROR: primaryAssemblyProjectAccession not found in NGL-BI", file=sys.stderr)
@@ -117,8 +123,11 @@ def extract_ngl_fields(assembly):
     if not ngl_tolid:
         print("ERROR: tolid not found in NGL-BI", file=sys.stderr)
         sys.exit(1)
+    if not taxon_code:
+        print("ERROR: taxon_code not found in NGL-BI", file=sys.stderr)
+        sys.exit(1)
 
-    return ngl_study, ngl_tolid
+    return ngl_study, ngl_tolid, taxon_code
 
 
 def update_ngl(project_code: str, material_code: str, assembly_name: str):
@@ -152,7 +161,7 @@ def get_sample_taxid(sample_accession: str) -> str:
 # --- Validation ---
 
 
-def validate(study, assembly_name, ngl_study, ngl_tolid):
+def validate(study, assembly_name, taxid, ngl_study, ngl_tolid, ngl_taxid):
     """Validate that manifest fields match NGL-BI data."""
     if ngl_study != study:
         print(
@@ -164,6 +173,13 @@ def validate(study, assembly_name, ngl_study, ngl_tolid):
     if not assembly_name.startswith(ngl_tolid):
         print(
             f"ERROR: ASSEMBLYNAME '{assembly_name}' does not contain tolid '{ngl_tolid}'",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    if not taxid != ngl_taxid:
+        print(
+            f"ERROR: TAXID mismatch: sample has '{taxid}' but NGL-BI has '{ngl_taxid}'",
             file=sys.stderr,
         )
         sys.exit(1)
