@@ -8,7 +8,7 @@ import subprocess
 import sys
 
 
-os.environ["CONFFILE"] = "/env/atelier/ngs_ba/cns/conf/ngljoe_ba.conf"
+os.environ["CONFFILE"] = "/env/atelier/ngs_ba/cns/conf/prod_ba.conf"
 ngs_workflow.env.load_conf_file()
 
 
