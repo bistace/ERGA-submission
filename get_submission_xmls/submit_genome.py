@@ -35,12 +35,17 @@ def main():
     manifest = parse_manifest(args.manifest)
     study, sample, assembly_name = extract_manifest_fields(manifest)
 
-    assembly = get_assembly_json(args.project, args.material)
-    if assembly is None:
+    assembly_json = get_assembly_json(args.project, args.material)
+    if assembly_json is None:
+        print("Failed to get NGS-BA json from NGL.")
+        sys.exit(1)
+    sample_json = get_sample_json(args.project, args.material)
+    if sample_json is None:
+        print("Failed to get sample json from NG.")
         sys.exit(1)
 
     ebi_taxid = get_sample_taxid(sample)
-    ngl_study, ngl_tolid, ngl_taxid = extract_ngl_fields(assembly)
+    ngl_study, ngl_tolid, ngl_taxid = extract_ngl_fields(assembly_json, sample_json)
     validate(study, assembly_name, ebi_taxid, ngl_study, ngl_tolid, ngl_taxid)
 
     print(f"Manifest study: {study}")
@@ -59,8 +64,8 @@ def main():
     account, password = read_credentials(cred_path)
     webin_cli_jar = download_webin_cli()
 
-    submit_genome(webin_cli_jar, args.manifest, account, password)
-    update_ngl(args.project, args.material, assembly_name)
+    # submit_genome(webin_cli_jar, args.manifest, account, password)
+    # update_ngl(args.project, args.material, assembly_name)
 
 
 # --- Manifest parsing ---
@@ -109,10 +114,10 @@ def get_sample_json(project_code: str, material_code: str) -> dict:
     return ngl.get_from_bi(f"samples/{project_code}_{material_code}")
 
 
-def extract_ngl_fields(assembly):
+def extract_ngl_fields(assembly, sample):
     """Extract study accession, tolid and taxid from an NGL-BI assembly response."""
     assembly_properties = assembly.get("assembly_properties", {})
-    taxon_code = assembly.get("taxon_code", {})
+    taxon_code = sample.get("taxon_code", {})
 
     ngl_study = assembly_properties.get("primaryAssemblyProjectAccession", {}).get("value")
     ngl_tolid = assembly_properties.get("tolid", {}).get("value")
