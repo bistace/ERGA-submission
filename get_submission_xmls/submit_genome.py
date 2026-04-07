@@ -53,7 +53,7 @@ def main():
     account, password = read_credentials(cred_path)
     webin_cli_jar = download_webin_cli()
 
-    # submit_genome(webin_cli_jar, args.manifest, account, password)
+    submit_genome(webin_cli_jar, args.manifest, account, password)
     update_ngl(args.project, args.material, assembly_name)
 
 
