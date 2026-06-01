@@ -65,8 +65,8 @@ def main():
     account, password = read_credentials(cred_path)
     webin_cli_jar = download_webin_cli()
     try:
-        # submit_genome(webin_cli_jar, args.manifest, account, password)
-        # update_ngl(args.project, args.material, assembly_name)
+        submit_genome(webin_cli_jar, args.manifest, account, password)
+        update_ngl(args.project, args.material, assembly_name)
         pass
     finally:
         if os.path.exists(webin_cli_jar):
