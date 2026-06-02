@@ -9,12 +9,20 @@ import sys
 # Manifest fields that are constant for every ATLASea genome submission.
 STATIC_FIELDS = {
     "ASSEMBLY_TYPE": "clone or isolate",
-    "PROGRAM": "Hifiasm,Purge_dups,Yahs",
     "MINGAPLENGTH": "100",
     "MOLECULETYPE": "genomic DNA",
     "CHROMOSOME_LIST": "chr_list.txt.gz",
     "UNLOCALISED_LIST": "unloc_list.txt.gz",
 }
+
+# Downstream programs in the PROGRAM field, appended after the assembler.
+DOWNSTREAM_PROGRAMS = "Purge_dups,Yahs"
+
+# Assembler detected from the selectedAssembly path in the Assembly
+# Decontamination treatment. Each entry maps a lowercase substring to its
+# manifest label; the first match (in order) wins.
+ASSEMBLERS = [("flye", "Flye"), ("hifiasm", "Hifiasm"), ("nextdenovo", "Nextdenovo")]
+DEFAULT_ASSEMBLER = "Hifiasm"
 
 # PLATFORM is built from the long-read technology plus the Hi-C kit(s) used,
 # e.g. "PacBio,Arima", "ONT,OmniC" or "PacBio,Arima,OmniC".
@@ -49,15 +57,19 @@ def main():
 
     study, assembly_name, coverage = extract_fields(assembly_json)
     platform = determine_platform(assembly_json)
+    program = determine_program(assembly_json)
     description = get_description(args.project, args.material)
 
-    manifest = build_manifest(study, assembly_name, coverage, platform, description, args.fasta)
+    manifest = build_manifest(
+        study, assembly_name, coverage, program, platform, description, args.fasta
+    )
     write_manifest(manifest, args.output)
 
     print(f"Manifest written to {args.output}", file=sys.stderr)
     print(f"  STUDY:        {study}", file=sys.stderr)
     print(f"  ASSEMBLYNAME: {assembly_name}", file=sys.stderr)
     print(f"  COVERAGE:     {coverage}", file=sys.stderr)
+    print(f"  PROGRAM:      {program}", file=sys.stderr)
     print(f"  PLATFORM:     {platform}", file=sys.stderr)
     print(f"  DESCRIPTION:  {'set from EAR data' if description else 'blank'}", file=sys.stderr)
     print("  SAMPLE left blank for manual entry.", file=sys.stderr)
@@ -131,6 +143,50 @@ def determine_platform(assembly: dict) -> str:
     """Build the PLATFORM value from the long-read technology and the Hi-C kit(s)."""
     components = [determine_long_read(assembly)] + determine_hic_kits(assembly)
     return ",".join(components)
+
+
+def determine_assembler(assembly: dict) -> str:
+    """Detect the assembler from the selectedAssembly path in the Assembly Decontamination treatment.
+
+    The selectedAssembly value is a path to the chosen assembly FASTA, e.g.
+    ".../best_formatted/Flye_fmt.fasta". The assembler name is matched
+    case-insensitively against the known assemblers. Falls back to
+    DEFAULT_ASSEMBLER with a warning if the field is missing or unrecognised.
+    """
+    decontamination = assembly.get("treatments", {}).get("assemblyDecontamination")
+    if not decontamination:
+        print(
+            "WARNING: assemblyDecontamination treatment not found in NGL-BI, "
+            f"defaulting assembler to {DEFAULT_ASSEMBLER}",
+            file=sys.stderr,
+        )
+        return DEFAULT_ASSEMBLER
+
+    selected = decontamination.get("pairs", {}).get("selectedAssembly", {}).get("value")
+    if not selected:
+        print(
+            "WARNING: selectedAssembly not found in Assembly Decontamination treatment, "
+            f"defaulting assembler to {DEFAULT_ASSEMBLER}",
+            file=sys.stderr,
+        )
+        return DEFAULT_ASSEMBLER
+
+    selected_lower = selected.lower()
+    for needle, label in ASSEMBLERS:
+        if needle in selected_lower:
+            return label
+
+    print(
+        f"WARNING: could not detect a known assembler in selectedAssembly '{selected}', "
+        f"defaulting assembler to {DEFAULT_ASSEMBLER}",
+        file=sys.stderr,
+    )
+    return DEFAULT_ASSEMBLER
+
+
+def determine_program(assembly: dict) -> str:
+    """Build the PROGRAM value from the detected assembler and the downstream programs."""
+    return f"{determine_assembler(assembly)},{DOWNSTREAM_PROGRAMS}"
 
 
 def extract_fields(assembly: dict):
@@ -238,7 +294,13 @@ def get_description(project_code: str, material_code: str) -> str:
 
 
 def build_manifest(
-    study: str, assembly_name: str, coverage: str, platform: str, description: str, fasta: str
+    study: str,
+    assembly_name: str,
+    coverage: str,
+    program: str,
+    platform: str,
+    description: str,
+    fasta: str,
 ) -> list:
     """Build the ordered list of (key, value) manifest lines."""
     return [
@@ -247,7 +309,7 @@ def build_manifest(
         ("ASSEMBLYNAME", assembly_name),
         ("ASSEMBLY_TYPE", STATIC_FIELDS["ASSEMBLY_TYPE"]),
         ("COVERAGE", coverage),
-        ("PROGRAM", STATIC_FIELDS["PROGRAM"]),
+        ("PROGRAM", program),
         ("PLATFORM", platform),
         ("MINGAPLENGTH", STATIC_FIELDS["MINGAPLENGTH"]),
         ("MOLECULETYPE", STATIC_FIELDS["MOLECULETYPE"]),
