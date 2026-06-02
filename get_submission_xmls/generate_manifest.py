@@ -29,12 +29,12 @@ HIC_KITS = [("arima", "Arima"), ("omnic", "OmniC")]
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Generate an ENA manifest file from NGL-BI data."
-    )
+    parser = argparse.ArgumentParser(description="Generate an ENA manifest file from NGL-BI data.")
     parser.add_argument("--project", required=True, help="Project code")
     parser.add_argument("--material", required=True, help="Material code")
-    parser.add_argument("--fasta", required=True, help="Assembly FASTA file (e.g. laThaTest1.fa.gz)")
+    parser.add_argument(
+        "--fasta", required=True, help="Assembly FASTA file (e.g. laThaTest1.fa.gz)"
+    )
     parser.add_argument(
         "--output",
         default="manifest.txt",
@@ -111,13 +111,19 @@ def determine_hic_kits(assembly: dict) -> list:
     """Return the Hi-C kit(s) (Arima and/or OmniC) found in the Hi-C LibQC treatment."""
     hic = assembly.get("treatments", {}).get("hicLibqc")
     if not hic:
-        print("WARNING: hicLibqc treatment not found in NGL-BI, no Hi-C kit added to PLATFORM", file=sys.stderr)
+        print(
+            "WARNING: hicLibqc treatment not found in NGL-BI, no Hi-C kit added to PLATFORM",
+            file=sys.stderr,
+        )
         return []
 
     pairs = hic.get("pairs", {})
     kits = [label for key, label in HIC_KITS if pairs.get(key, {}).get("value")]
     if not kits:
-        print("WARNING: no Arima or OmniC entries in hicLibqc treatment, no Hi-C kit added to PLATFORM", file=sys.stderr)
+        print(
+            "WARNING: no Arima or OmniC entries in hicLibqc treatment, no Hi-C kit added to PLATFORM",
+            file=sys.stderr,
+        )
     return kits
 
 
@@ -136,7 +142,10 @@ def extract_fields(assembly: dict):
 
     study = properties.get("primaryAssemblyProjectAccession", {}).get("value")
     if not study:
-        print("WARNING: primaryAssemblyProjectAccession not found in NGL-BI, leaving STUDY blank", file=sys.stderr)
+        print(
+            "WARNING: primaryAssemblyProjectAccession not found in NGL-BI, leaving STUDY blank",
+            file=sys.stderr,
+        )
         study = ""
 
     tolid = properties.get("tolid", {}).get("value")
@@ -175,7 +184,9 @@ def extract_lr_coverage(assembly: dict) -> str:
 
     coverage = lr_reads[0].get("coverage")
     if coverage is None:
-        print("WARNING: coverage value missing for LR reads, leaving COVERAGE blank", file=sys.stderr)
+        print(
+            "WARNING: coverage value missing for LR reads, leaving COVERAGE blank", file=sys.stderr
+        )
         return ""
 
     return str(round(coverage))
@@ -192,8 +203,8 @@ def get_description(project_code: str, material_code: str) -> str:
     """
     pattern = (
         f"/env/cns/proj/projet_{project_code}/scratch/CORRECTED_SCAFFOLDING/"
-        f"{project_code}_{material_code}_*/review/"
-        f"{project_code}_{material_code}_review_ear_data.csv"
+        f"{project_code}_{material_code}_*/curation/"
+        f"{project_code}_{material_code}_curation_ear_data.csv"
     )
     matches = glob.glob(pattern)
     if not matches:
@@ -203,7 +214,9 @@ def get_description(project_code: str, material_code: str) -> str:
         )
         return ""
     if len(matches) > 1:
-        print(f"WARNING: multiple EAR data files match {pattern}, using {matches[0]}", file=sys.stderr)
+        print(
+            f"WARNING: multiple EAR data files match {pattern}, using {matches[0]}", file=sys.stderr
+        )
 
     path = matches[0]
     try:
@@ -215,14 +228,18 @@ def get_description(project_code: str, material_code: str) -> str:
         print(f"WARNING: could not read {path}: {e}, leaving DESCRIPTION blank", file=sys.stderr)
         return ""
 
-    print(f"WARNING: curation_notes not found in {path}, leaving DESCRIPTION blank", file=sys.stderr)
+    print(
+        f"WARNING: curation_notes not found in {path}, leaving DESCRIPTION blank", file=sys.stderr
+    )
     return ""
 
 
 # --- Manifest writing ---
 
 
-def build_manifest(study: str, assembly_name: str, coverage: str, platform: str, description: str, fasta: str) -> list:
+def build_manifest(
+    study: str, assembly_name: str, coverage: str, platform: str, description: str, fasta: str
+) -> list:
     """Build the ordered list of (key, value) manifest lines."""
     return [
         ("STUDY", study),
