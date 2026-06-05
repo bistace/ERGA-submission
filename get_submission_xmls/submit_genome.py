@@ -161,10 +161,14 @@ def extract_ngl_fields(assembly, sample):
 
 
 def update_ngl(project_code: str, material_code: str, assembly_name: str):
-    """Update assembly name and downloaded from NCBI checkbox"""
+    """Update assembly name and downloaded from NCBI checkbox
+        as well as validation status and state
+    """
     code = f"BA.{project_code}_{material_code}"
     ngl.analyses.update_downloaded_from_ncbi(code, False)
     ngl.analyses.update_assembly_to_download_version(code, assembly_name)
+    ngl.analyses.update_substate(code, "Submission Done")
+    ngl.analyses.update_validation(code, True)
 
 
 # --- EBI API ---
