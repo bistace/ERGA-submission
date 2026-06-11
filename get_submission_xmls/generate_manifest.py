@@ -259,8 +259,8 @@ def get_description(project_code: str, material_code: str) -> str:
     """
     pattern = (
         f"/env/cns/proj/projet_{project_code}/scratch/CORRECTED_SCAFFOLDING/"
-        f"{project_code}_{material_code}_*/curation/"
-        f"{project_code}_{material_code}_curation_ear_data.csv"
+        f"{project_code}_{material_code}_*/review/"
+        f"{project_code}_{material_code}_review_ear_data.csv"
     )
     matches = glob.glob(pattern)
     if not matches:
