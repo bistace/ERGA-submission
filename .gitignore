@@ -1,2 +1,4 @@
 .venv
 test_data
+.env
+__pycache__
