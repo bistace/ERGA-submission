@@ -49,6 +49,15 @@ def main():
     ngl_study, ngl_tolid, ngl_taxid = extract_ngl_fields(assembly_json, sample_json)
     validate(study, assembly_name, ebi_taxid, ngl_study, ngl_tolid, ngl_taxid)
 
+    state = assembly_json.get("properties", {}).get("state", {}).get("value")
+    if state not in ("F-REV", "F-SUB"):
+        print(
+            f"ERROR: NGL-BI state for {args.project}_{args.material} is '{state}', "
+            f"expected 'F-REV' or 'F-SUB'",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
     print(f"Manifest study: {study}")
     print(f"NGL-BI study:   {ngl_study}")
     print(f"Manifest assembly name: {assembly_name}")
