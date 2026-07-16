@@ -76,10 +76,12 @@ def main():
     try:
         submit_genome(webin_cli_jar, args.manifest, account, password)
         update_ngl(args.project, args.material, assembly_name)
-        pass
     finally:
         if os.path.exists(webin_cli_jar):
             os.remove(webin_cli_jar)
+
+    if not run_submit_ear(args.project, args.material):
+        sys.exit(1)
 
 
 # --- Manifest parsing ---
@@ -295,6 +297,44 @@ def submit_genome(webin_cli_jar, manifest_path, account, password):
         sys.exit(1)
 
     print("Submission was successful", file=sys.stderr)
+
+
+def run_submit_ear(project, material):
+    """Run the standalone EAR uploader after the other submission steps."""
+    ear_cmd = [
+        "submit_ear",
+        "--project",
+        project,
+        "--material",
+        material,
+    ]
+    try:
+        ear_result = subprocess.run(ear_cmd)
+    except OSError as error:
+        print(f"ERROR: Could not launch submit_ear: {error}", file=sys.stderr)
+        ear_succeeded = False
+    else:
+        ear_succeeded = ear_result.returncode == 0
+
+    if ear_succeeded:
+        return True
+
+    print(
+        f"ERROR: EAR report upload failed for project '{project}', "
+        f"material '{material}'.",
+        file=sys.stderr,
+    )
+    print(
+        "ENA genome submission and NGL-BI update completed successfully – "
+        "do not repeat those steps.",
+        file=sys.stderr,
+    )
+    print("To retry the EAR upload only, run:", file=sys.stderr)
+    print(
+        f"    submit_ear --project {project} --material {material}",
+        file=sys.stderr,
+    )
+    return False
 
 
 if __name__ == "__main__":
