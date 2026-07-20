@@ -1,0 +1,14 @@
+STUDY   PRJEB112115
+SAMPLE  ERS29774566
+ASSEMBLYNAME    xcAllMedi1.1
+ASSEMBLY_TYPE   clone or isolate
+COVERAGE        40
+PROGRAM Hifiasm,Purge_dups,Yahs
+PLATFORM        ONT,Arima
+MINGAPLENGTH    100
+MOLECULETYPE    genomic DNA
+DESCRIPTION     The assembly of Alloteuthis media (xcAllMedi1) is based on 40X ONT data and 127X Arima Hi-C data generated as part of the ATLASea programme (https://www.atlasea.fr). The assembly process included the following steps: initial ONT assembly generation with Hifiasm, removal of contaminant sequences using Context, removal of haplotypic duplications using purge_dups, and Hi-C-based scaffolding with YaHS. In total, 6 contigs were identified as contaminants (bacterial, archaeal, or viral), totaling 0.176 Mb (with the largest being 0.08 Mb). Additionally, 1812 regions totaling 363.748 Mb (with the largest being 2.376 Mb) were identified as haplotypic duplications and removed. Finally, the primary assembly was analyzed and manually improved using Pretext. During manual curation, 184 haplotypic regions were removed, totaling 278.975Mb (with the largest being 6.398Mb). Chromosome-scale scaffolds confirmed by Hi-C data were named in order of size.
+RUN_REF
+FASTA   xcAllMedi1.fa.gz
+CHROMOSOME_LIST chr_list.txt.gz
+UNLOCALISED_LIST        unloc_list.txt.gz

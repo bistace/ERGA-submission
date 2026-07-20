@@ -1,0 +1,47 @@
+{
+    "main": true, // always true for now
+    "submission_date": "2026-07-16T13:11:14.977Z", // today's date when submitting
+    "assembly_level": "chromosome", // always chromosomes for now 
+    // Known by parsing NGL
+    "bioproject_umbrella": "string",
+    "bioproject_assembly": "string",
+    "bioproject_reads": "string",
+    "atlaseaid_prefix": "", // Leave empty for now
+    "main_specimen_code": "string", // "Code unique individu" in NGL
+    "assembly_accession": "", // leave empty for now
+    "busco_euk_genome_s": 0,
+    "busco_euk_genome_d": 0,
+    "busco_euk_genome_m": 0,
+    "busco_euk_genome_f": 0,
+    "busco_euk_dataset": 0,
+    "busco_euk_nbgenes": 0,
+    "busco_lin_genome_s": 0,
+    "busco_lin_genome_d": 0,
+    "busco_lin_genome_m": 0,
+    "busco_lin_genome_f": 0,
+    "busco_lin_dataset": 0,
+    "busco_lin_nbgenes": 0,
+    "merqury_completion": 0.0,
+    "merqury_score": 0.0,
+    // Known by parsing the submission manifest
+    "ena_sample_code": "string", // SAMPLE field
+    "assembly_name": "string", // ASSEMBLY NAME field
+    "ear_report": "string", // "EARs/tolid_EAR.pdf
+    "sequencing": [], // PLATFORM field, "PacBio" and or "ONT" + HiC technology
+    // Known by parsing busco logs
+    "busco_version": "0.0.0",
+    "busco_dataset_version": "odb12",
+    // Known by parsing gfastats logs
+    "nb_scaffolds": 0,
+    "size": 0,
+    "gc_content": 0,
+    "n50_scaffolds": 0,
+    "n90_scaffolds": 0,
+    "l50_scaffolds": 0,
+    "l90_scaffolds": 0,
+    "nb_contigs": 0,
+    "n50_contigs": 0,
+    "n90_contigs": 0,
+    "l50_contigs": 0,
+    "l90_contigs": 0,
+}
