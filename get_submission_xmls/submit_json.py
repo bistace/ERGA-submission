@@ -17,7 +17,7 @@ REQUEST_HEADERS = {"User-Agent": "bot", "Accept": "application/json"}
 REQUEST_TIMEOUT = 60
 SUBMISSION_TIMEZONE = ZoneInfo("Europe/Paris")
 BUSCO_RELATIVE_DIRECTORY = Path("eukaryota") / "Busco_geno_eukaryota"
-BUSCO_FILENAME_PATTERN = "short_summary.specific.*.Busco_geno.json"
+BUSCO_FILENAME_PATTERN = "short_summary.specific.*.Busco_geno*.json"
 GFASTATS_FIELDS = {
     "# scaffolds": ("nb_scaffolds", int),
     "Total scaffold length": ("size", int),
