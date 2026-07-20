@@ -18,6 +18,20 @@ REQUEST_TIMEOUT = 60
 SUBMISSION_TIMEZONE = ZoneInfo("Europe/Paris")
 BUSCO_RELATIVE_DIRECTORY = Path("eukaryota") / "Busco_geno_eukaryota"
 BUSCO_FILENAME_PATTERN = "short_summary.specific.*.Busco_geno.json"
+GFASTATS_FIELDS = {
+    "# scaffolds": ("nb_scaffolds", int),
+    "Total scaffold length": ("size", int),
+    "GC content %": ("gc_content", float),
+    "Scaffold N50": ("n50_scaffolds", int),
+    "Scaffold N90": ("n90_scaffolds", int),
+    "Scaffold L50": ("l50_scaffolds", int),
+    "Scaffold L90": ("l90_scaffolds", int),
+    "# contigs": ("nb_contigs", int),
+    "Contig N50": ("n50_contigs", int),
+    "Contig N90": ("n90_contigs", int),
+    "Contig L50": ("l50_contigs", int),
+    "Contig L90": ("l90_contigs", int),
+}
 
 ANALYSIS_INCLUDES = (
     "sampleCodes",
@@ -214,6 +228,62 @@ def parse_busco_log(path: Path) -> dict:
     return {"version": version, "dataset_version": dataset_version}
 
 
+def resolve_gfastats_path(
+    override: Path | None,
+    result_directory: str | None,
+    lineage_dataset: str,
+) -> Path:
+    if override is not None:
+        if not override.is_file():
+            raise SubmissionDataError(f"gfastats file was not found: {override}")
+        return override
+
+    if not result_directory:
+        raise SubmissionDataError(
+            "NGL-BI reviewing treatment is missing resultDirectory.value"
+        )
+    if not lineage_dataset:
+        raise SubmissionDataError("NGL-BI reviewing treatment is missing taxonBusco.value")
+
+    path = (
+        Path(result_directory)
+        / lineage_dataset
+        / "Results"
+        / "gfastats_assembly.txt"
+    )
+    if not path.is_file():
+        raise SubmissionDataError(f"gfastats file was not found: {path}")
+    return path
+
+
+def parse_gfastats(path: Path) -> dict:
+    metrics = {}
+    with path.open(encoding="utf-8") as gfastats_file:
+        for line in gfastats_file:
+            label, separator, raw_value = line.strip().partition(":")
+            if not separator or label not in GFASTATS_FIELDS:
+                continue
+
+            output_field, converter = GFASTATS_FIELDS[label]
+            try:
+                metrics[output_field] = converter(raw_value.strip())
+            except ValueError as error:
+                raise SubmissionDataError(
+                    f"invalid {label} value in gfastats file {path}: {raw_value.strip()!r}"
+                ) from error
+
+    missing_fields = [
+        output_field
+        for output_field, _ in GFASTATS_FIELDS.values()
+        if output_field not in metrics
+    ]
+    if missing_fields:
+        raise SubmissionDataError(
+            f"gfastats file is missing required metric(s): {', '.join(missing_fields)}"
+        )
+    return metrics
+
+
 def parse_manifest(path: Path) -> dict:
     fields = {}
     with path.open(encoding="utf-8") as manifest_file:
@@ -254,7 +324,11 @@ def extract_manifest_values(manifest: dict) -> dict:
 
 
 def build_submission_json(
-    ngl: dict, main_specimen_code: str, manifest: dict, busco: dict
+    ngl: dict,
+    main_specimen_code: str,
+    manifest: dict,
+    busco: dict,
+    gfastats: dict,
 ) -> dict:
     euk = ngl["busco_euk"]
     lineage = ngl["busco_lin"]
@@ -291,18 +365,18 @@ def build_submission_json(
         "sequencing": manifest["sequencing"],
         "busco_version": busco["version"],
         "busco_dataset_version": busco["dataset_version"],
-        "nb_scaffolds": 0,
-        "size": 0,
-        "gc_content": 0,
-        "n50_scaffolds": 0,
-        "n90_scaffolds": 0,
-        "l50_scaffolds": 0,
-        "l90_scaffolds": 0,
-        "nb_contigs": 0,
-        "n50_contigs": 0,
-        "n90_contigs": 0,
-        "l50_contigs": 0,
-        "l90_contigs": 0,
+        "nb_scaffolds": gfastats["nb_scaffolds"],
+        "size": gfastats["size"],
+        "gc_content": gfastats["gc_content"],
+        "n50_scaffolds": gfastats["n50_scaffolds"],
+        "n90_scaffolds": gfastats["n90_scaffolds"],
+        "l50_scaffolds": gfastats["l50_scaffolds"],
+        "l90_scaffolds": gfastats["l90_scaffolds"],
+        "nb_contigs": gfastats["nb_contigs"],
+        "n50_contigs": gfastats["n50_contigs"],
+        "n90_contigs": gfastats["n90_contigs"],
+        "l50_contigs": gfastats["l50_contigs"],
+        "l90_contigs": gfastats["l90_contigs"],
     }
 
 
@@ -323,6 +397,13 @@ def main() -> int:
         ),
     )
     parser.add_argument(
+        "--gfastats",
+        type=Path,
+        help=(
+            "Path to gfastats output; defaults to the lineage dataset directory"
+        ),
+    )
+    parser.add_argument(
         "--output",
         type=Path,
         default=Path("submission.json"),
@@ -339,7 +420,13 @@ def main() -> int:
             main_specimen_code = fetch_main_specimen_code(session, ngl["sample_code"])
         busco_path = resolve_busco_path(args.busco, ngl["result_directory"])
         busco = parse_busco_log(busco_path)
-        submission = build_submission_json(ngl, main_specimen_code, manifest, busco)
+        gfastats_path = resolve_gfastats_path(
+            args.gfastats, ngl["result_directory"], ngl["busco_lin_dataset"]
+        )
+        gfastats = parse_gfastats(gfastats_path)
+        submission = build_submission_json(
+            ngl, main_specimen_code, manifest, busco, gfastats
+        )
         with args.output.open("w", encoding="utf-8") as output_file:
             json.dump(submission, output_file, indent=4)
             output_file.write("\n")
