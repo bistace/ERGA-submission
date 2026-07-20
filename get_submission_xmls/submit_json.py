@@ -16,6 +16,8 @@ NGL_SQ_BASE_URL = "http://ngl-sq.genoscope.cns.fr"
 REQUEST_HEADERS = {"User-Agent": "bot", "Accept": "application/json"}
 REQUEST_TIMEOUT = 60
 SUBMISSION_TIMEZONE = ZoneInfo("Europe/Paris")
+BUSCO_RELATIVE_DIRECTORY = Path("eukaryota") / "Busco_geno_eukaryota"
+BUSCO_FILENAME_PATTERN = "short_summary.specific.*.Busco_geno.json"
 
 ANALYSIS_INCLUDES = (
     "sampleCodes",
@@ -27,6 +29,7 @@ ANALYSIS_INCLUDES = (
     "treatments.reviewing.pairs.scoreBuscoEuk",
     "treatments.reviewing.pairs.scoreBuscoTaxon",
     "treatments.reviewing.pairs.taxonBusco",
+    "treatments.reviewing.pairs.resultDirectory",
 )
 
 BUSCO_SCORE_PATTERN = re.compile(
@@ -80,6 +83,13 @@ def extract_analysis_values(analysis: dict) -> dict:
             f"NGL-BI analysis must link exactly one sample; found {count}"
         )
 
+    result_directory_pair = pairs.get("resultDirectory")
+    result_directory = (
+        result_directory_pair.get("value")
+        if isinstance(result_directory_pair, dict)
+        else None
+    )
+
     return {
         "bioproject_umbrella": required_pair_value(
             properties, "umbrellaProjectAccession", "NGL-BI properties"
@@ -106,6 +116,7 @@ def extract_analysis_values(analysis: dict) -> dict:
         "merqury_score": float(
             required_pair_value(pairs, "merquryScore", "NGL-BI reviewing treatment")
         ),
+        "result_directory": result_directory,
     }
 
 
@@ -158,6 +169,51 @@ def fetch_main_specimen_code(session: requests.Session, sample_code: str) -> str
     )
 
 
+def resolve_busco_path(override: Path | None, result_directory: str | None) -> Path:
+    if override is not None:
+        if not override.is_file():
+            raise SubmissionDataError(f"BUSCO log was not found: {override}")
+        return override
+
+    if not result_directory:
+        raise SubmissionDataError(
+            "NGL-BI reviewing treatment is missing resultDirectory.value"
+        )
+
+    busco_directory = Path(result_directory) / BUSCO_RELATIVE_DIRECTORY
+    matches = list(busco_directory.glob(BUSCO_FILENAME_PATTERN))
+    if not matches:
+        raise SubmissionDataError(
+            f"no BUSCO log matching {BUSCO_FILENAME_PATTERN} in {busco_directory}"
+        )
+    if len(matches) > 1:
+        raise SubmissionDataError(
+            f"multiple BUSCO logs matching {BUSCO_FILENAME_PATTERN} in {busco_directory}"
+        )
+    return matches[0]
+
+
+def parse_busco_log(path: Path) -> dict:
+    with path.open(encoding="utf-8") as busco_file:
+        log = json.load(busco_file)
+
+    versions = log.get("versions") if isinstance(log, dict) else None
+    version = versions.get("busco") if isinstance(versions, dict) else None
+    if not isinstance(version, str) or not version:
+        raise SubmissionDataError(f"BUSCO log is missing versions.busco: {path}")
+
+    parameters = log.get("parameters")
+    dataset_version = (
+        parameters.get("datasets_version") if isinstance(parameters, dict) else None
+    )
+    if not isinstance(dataset_version, str) or not dataset_version:
+        raise SubmissionDataError(
+            f"BUSCO log is missing parameters.datasets_version: {path}"
+        )
+
+    return {"version": version, "dataset_version": dataset_version}
+
+
 def parse_manifest(path: Path) -> dict:
     fields = {}
     with path.open(encoding="utf-8") as manifest_file:
@@ -198,7 +254,7 @@ def extract_manifest_values(manifest: dict) -> dict:
 
 
 def build_submission_json(
-    ngl: dict, main_specimen_code: str, manifest: dict
+    ngl: dict, main_specimen_code: str, manifest: dict, busco: dict
 ) -> dict:
     euk = ngl["busco_euk"]
     lineage = ngl["busco_lin"]
@@ -233,7 +289,8 @@ def build_submission_json(
         "assembly_name": manifest["assembly_name"],
         "ear_report": manifest["ear_report"],
         "sequencing": manifest["sequencing"],
-        "busco_version": "",
+        "busco_version": busco["version"],
+        "busco_dataset_version": busco["dataset_version"],
         "nb_scaffolds": 0,
         "size": 0,
         "gc_content": 0,
@@ -259,6 +316,13 @@ def main() -> int:
         "--manifest", required=True, type=Path, help="Path to the ENA manifest file"
     )
     parser.add_argument(
+        "--busco",
+        type=Path,
+        help=(
+            "Path to a BUSCO JSON log; defaults to the reviewing result directory"
+        ),
+    )
+    parser.add_argument(
         "--output",
         type=Path,
         default=Path("submission.json"),
@@ -273,7 +337,9 @@ def main() -> int:
             analysis = fetch_analysis(session, args.project, args.material)
             ngl = extract_analysis_values(analysis)
             main_specimen_code = fetch_main_specimen_code(session, ngl["sample_code"])
-        submission = build_submission_json(ngl, main_specimen_code, manifest)
+        busco_path = resolve_busco_path(args.busco, ngl["result_directory"])
+        busco = parse_busco_log(busco_path)
+        submission = build_submission_json(ngl, main_specimen_code, manifest, busco)
         with args.output.open("w", encoding="utf-8") as output_file:
             json.dump(submission, output_file, indent=4)
             output_file.write("\n")
