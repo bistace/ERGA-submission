@@ -158,7 +158,48 @@ def fetch_main_specimen_code(session: requests.Session, sample_code: str) -> str
     )
 
 
-def build_submission_json(ngl: dict, main_specimen_code: str) -> dict:
+def parse_manifest(path: Path) -> dict:
+    fields = {}
+    with path.open(encoding="utf-8") as manifest_file:
+        for line in manifest_file:
+            parts = line.strip().split(None, 1)
+            if len(parts) == 2:
+                fields[parts[0]] = parts[1]
+    return fields
+
+
+def extract_manifest_values(manifest: dict) -> dict:
+    required_fields = ("SAMPLE", "ASSEMBLYNAME", "PLATFORM")
+    missing_fields = [field for field in required_fields if not manifest.get(field)]
+    if missing_fields:
+        raise SubmissionDataError(
+            f"manifest is missing required field(s): {', '.join(missing_fields)}"
+        )
+
+    assembly_name = manifest["ASSEMBLYNAME"]
+    tolid = assembly_name.split(".", 1)[0]
+    platforms = [platform.strip() for platform in manifest["PLATFORM"].split(",")]
+    if not any(platform in {"PacBio", "ONT"} for platform in platforms):
+        raise SubmissionDataError(
+            "manifest PLATFORM must contain at least one of PacBio or ONT"
+        )
+    sequencing = [
+        platform
+        for platform in platforms
+        if platform in {"PacBio", "ONT", "Arima", "OmniC"}
+    ]
+
+    return {
+        "ena_sample_code": manifest["SAMPLE"],
+        "assembly_name": assembly_name,
+        "ear_report": f"EARs/{tolid}_EAR.pdf",
+        "sequencing": sequencing,
+    }
+
+
+def build_submission_json(
+    ngl: dict, main_specimen_code: str, manifest: dict
+) -> dict:
     euk = ngl["busco_euk"]
     lineage = ngl["busco_lin"]
 
@@ -188,10 +229,10 @@ def build_submission_json(ngl: dict, main_specimen_code: str) -> dict:
         "busco_lin_nbgenes": lineage["nbgenes"],
         "merqury_completion": ngl["merqury_completion"],
         "merqury_score": ngl["merqury_score"],
-        "ena_sample_code": "",
-        "assembly_name": "",
-        "ear_report": "",
-        "sequencing": [],
+        "ena_sample_code": manifest["ena_sample_code"],
+        "assembly_name": manifest["assembly_name"],
+        "ear_report": manifest["ear_report"],
+        "sequencing": manifest["sequencing"],
         "busco_version": "",
         "nb_scaffolds": 0,
         "size": 0,
@@ -215,6 +256,9 @@ def main() -> int:
     parser.add_argument("--project", required=True, help="NGL project code")
     parser.add_argument("--material", required=True, help="NGL material code")
     parser.add_argument(
+        "--manifest", required=True, type=Path, help="Path to the ENA manifest file"
+    )
+    parser.add_argument(
         "--output",
         type=Path,
         default=Path("submission.json"),
@@ -223,12 +267,13 @@ def main() -> int:
     args = parser.parse_args()
 
     try:
+        manifest = extract_manifest_values(parse_manifest(args.manifest))
         with requests.Session() as session:
             session.headers.update(REQUEST_HEADERS)
             analysis = fetch_analysis(session, args.project, args.material)
             ngl = extract_analysis_values(analysis)
             main_specimen_code = fetch_main_specimen_code(session, ngl["sample_code"])
-        submission = build_submission_json(ngl, main_specimen_code)
+        submission = build_submission_json(ngl, main_specimen_code, manifest)
         with args.output.open("w", encoding="utf-8") as output_file:
             json.dump(submission, output_file, indent=4)
             output_file.write("\n")
