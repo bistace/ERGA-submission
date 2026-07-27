@@ -85,7 +85,8 @@ def main():
     webin_cli_jar = download_webin_cli()
     try:
         submit_genome(webin_cli_jar, args.manifest, account, password)
-        update_ngl(args.project, args.material, assembly_name)
+        if not args.alternate:
+            update_ngl(args.project, args.material, assembly_name)
     finally:
         if os.path.exists(webin_cli_jar):
             os.remove(webin_cli_jar)
