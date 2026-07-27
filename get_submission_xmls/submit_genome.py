@@ -30,6 +30,14 @@ def main():
     parser.add_argument("--project", required=True, help="Project code")
     parser.add_argument("--material", required=True, help="Material code")
     parser.add_argument("--manifest", required=True, help="Path to ENA manifest file")
+    parser.add_argument(
+        "--alternate",
+        action="store_true",
+        help=(
+            "Validate STUDY against 'PRJEB Alternate Assemblage' instead of "
+            "'PRJEB Assemblage'"
+        ),
+    )
 
     args = parser.parse_args()
 
@@ -46,7 +54,9 @@ def main():
         sys.exit(1)
 
     ebi_taxid = get_sample_taxid(sample)
-    ngl_study, ngl_tolid, ngl_taxid = extract_ngl_fields(assembly_json, sample_json)
+    ngl_study, ngl_tolid, ngl_taxid = extract_ngl_fields(
+        assembly_json, sample_json, alternate=args.alternate
+    )
     validate(study, assembly_name, ebi_taxid, ngl_study, ngl_tolid, ngl_taxid)
 
     state = assembly_json.get("properties", {}).get("state", {}).get("value")
@@ -150,16 +160,21 @@ def get_sample_json(project_code: str, material_code: str) -> dict:
     return res.json()
 
 
-def extract_ngl_fields(assembly, sample):
-    """Extract study accession, tolid and taxid from an NGL-BI assembly response."""
+def extract_ngl_fields(assembly, sample, alternate=False):
+    """Extract study accession, tolid and taxid from NGL-BI responses."""
     properties = assembly.get("properties", {})
+    accession_property = (
+        "alternateAssemblyProjectAccession"
+        if alternate
+        else "primaryAssemblyProjectAccession"
+    )
 
-    ngl_study = properties.get("primaryAssemblyProjectAccession", {}).get("value")
+    ngl_study = properties.get(accession_property, {}).get("value")
     ngl_tolid = properties.get("tolid", {}).get("value")
     ngl_taxid = sample.get("taxonCode")
 
     if not ngl_study:
-        print("ERROR: primaryAssemblyProjectAccession not found in NGL-BI", file=sys.stderr)
+        print(f"ERROR: {accession_property} not found in NGL-BI", file=sys.stderr)
         sys.exit(1)
     if not ngl_tolid:
         print("ERROR: tolid not found in NGL-BI", file=sys.stderr)
