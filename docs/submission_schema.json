@@ -26,11 +26,19 @@
     "busco_lin_nbgenes": 0,
     "merqury_completion": 0.0,
     "merqury_score": 0.0,
+    // Known by parsing the NGL-BI readsets and their NGL-SQ samples
+    "sequencing": [ // one entry per sequencing type and specimen
+        {
+            "sequencing_type": "short_read", // short_read, long_read or hi_c
+            "creation_date": "2026-05-12T00:00:00", // readset run start date
+            "main": false, // true when built from a master readset
+            "specimens": ["A-76EV3UNTE"] // "Code unique individu" of the readset sample
+        }
+    ],
     // Known by parsing the submission manifest
     "ena_sample_code": "string", // SAMPLE field
     "assembly_name": "string", // ASSEMBLY NAME field (mandatory)
     "ear_report": "string", // "EARs/tolid_EAR.pdf (mandatory)
-    "sequencing": [], // PLATFORM field, "PacBio" and or "ONT" + HiC technology
     // Known by parsing busco logs
     "busco_version": "0.0.0",
     "busco_dataset_version": "odb12",

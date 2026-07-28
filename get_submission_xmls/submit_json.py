@@ -35,11 +35,18 @@ GFASTATS_FIELDS = {
 # Metrics without which the submission JSON is not usable; every other gfastats
 # metric is reported as missing and left out of the output.
 GFASTATS_MANDATORY_FIELDS = ("size", "gc_content")
-SEQUENCING_PLATFORMS = ("PacBio", "ONT", "Arima", "OmniC")
-LONG_READ_PLATFORMS = ("PacBio", "ONT")
+# NGL-BI readset typeCodes producing long reads. Every other known typeCode is
+# Illumina, where libProcessTypeCode tells Hi-C apart from whole-genome reads.
+LONG_READ_READSET_TYPES = ("rspacbio", "rsnanopore")
+ILLUMINA_READSET_TYPE = "rsillumina"
+HIC_LIB_PROCESS_TYPE = "DF"
+# Output order of the sequencing entries.
+SEQUENCING_TYPE_ORDER = ("short_read", "long_read", "hi_c")
 
 ANALYSIS_INCLUDES = (
     "sampleCodes",
+    "readSetCodes",
+    "masterReadSetCodes",
     "properties.umbrellaProjectAccession",
     "properties.sequencingProjectAccession",
     "properties.primaryAssemblyProjectAccession",
@@ -49,6 +56,14 @@ ANALYSIS_INCLUDES = (
     "treatments.reviewing.pairs.scoreBuscoTaxon",
     "treatments.reviewing.pairs.taxonBusco",
     "treatments.reviewing.pairs.resultDirectory",
+)
+
+READSET_INCLUDES = (
+    "code",
+    "typeCode",
+    "sampleCode",
+    "runSequencingStartDate",
+    "sampleOnContainer.properties.libProcessTypeCode",
 )
 
 BUSCO_SCORE_PATTERN = re.compile(
@@ -153,6 +168,18 @@ def extract_analysis_values(analysis: dict) -> dict:
     )
     reviewing_source = "NGL-BI reviewing treatment"
 
+    readset_codes = analysis.get("readSetCodes")
+    if not isinstance(readset_codes, list):
+        readset_codes = []
+    if not readset_codes:
+        warn("NGL-BI analysis has no readset; skipping sequencing")
+
+    master_readset_codes = analysis.get("masterReadSetCodes")
+    if not isinstance(master_readset_codes, list):
+        master_readset_codes = []
+    if readset_codes and not master_readset_codes:
+        warn("NGL-BI analysis has no master readset; no sequencing entry will be main")
+
     return {
         "bioproject_umbrella": optional_pair_value(
             properties,
@@ -167,6 +194,8 @@ def extract_analysis_values(analysis: dict) -> dict:
             properties, "sequencingProjectAccession", "NGL-BI properties"
         ),
         "sample_code": sample_codes[0],
+        "readset_codes": readset_codes,
+        "master_readset_codes": master_readset_codes,
         "busco_euk": optional_busco_score(
             pairs, "scoreBuscoEuk", reviewing_source, "the busco_euk_* fields"
         ),
@@ -186,36 +215,52 @@ def extract_analysis_values(analysis: dict) -> dict:
     }
 
 
-def fetch_main_specimen_code(session: requests.Session, sample_code: str) -> str:
-    params = (
-        ("codes", sample_code),
-        ("includes", "code"),
-        ("includes", "properties.individualNumber"),
+def fetch_readsets(session: requests.Session, readset_codes: list) -> list:
+    if not readset_codes:
+        return []
+
+    params = [("codes", code) for code in readset_codes]
+    params += [("includes", field) for field in READSET_INCLUDES]
+    response = session.get(
+        f"{NGL_BI_BASE_URL}/api/readsets", params=params, timeout=REQUEST_TIMEOUT
     )
+    response.raise_for_status()
+    readsets = response.json()
+    if not isinstance(readsets, list):
+        raise SubmissionDataError("NGL-BI readset query did not return a list")
+
+    missing = set(readset_codes) - {readset.get("code") for readset in readsets}
+    if missing:
+        warn(f"NGL-BI did not return readset(s) {', '.join(sorted(missing))}")
+    return readsets
+
+
+def fetch_specimen_codes(session: requests.Session, sample_codes: list) -> dict:
+    """Map each NGL-SQ sample code to its specimen code ("Code unique individu")."""
+    params = [("codes", code) for code in sample_codes]
+    params += [("includes", "code"), ("includes", "properties.individualNumber")]
     response = session.get(
         f"{NGL_SQ_BASE_URL}/api/samples", params=params, timeout=REQUEST_TIMEOUT
     )
     response.raise_for_status()
     samples = response.json()
+    if not isinstance(samples, list):
+        raise SubmissionDataError("NGL-SQ sample query did not return a list")
 
-    if not isinstance(samples, list) or len(samples) != 1:
-        count = len(samples) if isinstance(samples, list) else 0
-        raise SubmissionDataError(
-            f"NGL-SQ query for {sample_code} returned {count} samples"
+    missing = set(sample_codes) - {sample.get("code") for sample in samples}
+    if missing:
+        warn(f"NGL-SQ did not return sample(s) {', '.join(sorted(missing))}")
+
+    specimens = {}
+    for sample in samples:
+        properties = sample.get("properties")
+        pair = (
+            properties.get("individualNumber") if isinstance(properties, dict) else None
         )
-
-    returned_code = samples[0].get("code")
-    if returned_code != sample_code:
-        raise SubmissionDataError(
-            f"NGL-SQ returned sample {returned_code!r} instead of {sample_code!r}"
-        )
-
-    properties = samples[0].get("properties")
-    if not isinstance(properties, dict):
-        raise SubmissionDataError(f"NGL-SQ sample {sample_code} is missing properties")
-    return mandatory_pair_value(
-        properties, "individualNumber", f"NGL-SQ sample {sample_code} properties"
-    )
+        value = pair.get("value") if isinstance(pair, dict) else None
+        if value is not None:
+            specimens[sample.get("code")] = value
+    return specimens
 
 
 def resolve_busco_path(override: Path | None, result_directory: str | None) -> Path | None:
@@ -354,27 +399,6 @@ def parse_manifest(path: Path) -> dict:
     return fields
 
 
-def extract_sequencing(raw_platforms: str | None) -> list | None:
-    if not raw_platforms:
-        warn("manifest is missing PLATFORM; skipping sequencing")
-        return None
-
-    platforms = [platform.strip() for platform in raw_platforms.split(",")]
-    if not any(platform in LONG_READ_PLATFORMS for platform in platforms):
-        warn(f"manifest PLATFORM ({raw_platforms!r}) contains neither PacBio nor ONT")
-
-    sequencing = [
-        platform for platform in platforms if platform in SEQUENCING_PLATFORMS
-    ]
-    if not sequencing:
-        warn(
-            f"manifest PLATFORM ({raw_platforms!r}) has no known platform; "
-            "skipping sequencing"
-        )
-        return None
-    return sequencing
-
-
 def extract_manifest_values(manifest: dict) -> dict:
     assembly_name = manifest.get("ASSEMBLYNAME")
     if not assembly_name:
@@ -391,13 +415,13 @@ def extract_manifest_values(manifest: dict) -> dict:
         "ena_sample_code": ena_sample_code,
         "assembly_name": assembly_name,
         "ear_report": f"EARs/{tolid}_EAR.pdf",
-        "sequencing": extract_sequencing(manifest.get("PLATFORM")),
     }
 
 
 def build_submission_json(
     ngl: dict,
     main_specimen_code: str,
+    sequencing: list,
     manifest: dict,
     busco: dict,
     gfastats: dict,
@@ -434,7 +458,7 @@ def build_submission_json(
         "ena_sample_code": manifest["ena_sample_code"],
         "assembly_name": manifest["assembly_name"],
         "ear_report": manifest["ear_report"],
-        "sequencing": manifest["sequencing"],
+        "sequencing": sequencing or None,
         "busco_version": busco.get("version"),
         "busco_dataset_version": busco.get("dataset_version"),
         "nb_scaffolds": gfastats.get("nb_scaffolds"),
@@ -451,6 +475,76 @@ def build_submission_json(
         "l90_contigs": gfastats.get("l90_contigs"),
     }
     return {key: value for key, value in submission.items() if value is not None}
+
+
+def readset_sequencing_type(readset: dict) -> str | None:
+    type_code = readset.get("typeCode")
+    if type_code in LONG_READ_READSET_TYPES:
+        return "long_read"
+    if type_code != ILLUMINA_READSET_TYPE:
+        warn(
+            f"readset {readset.get('code')} has an unknown typeCode "
+            f"({type_code!r}); skipping it"
+        )
+        return None
+
+    container = readset.get("sampleOnContainer")
+    properties = container.get("properties") if isinstance(container, dict) else None
+    pair = (
+        properties.get("libProcessTypeCode") if isinstance(properties, dict) else None
+    )
+    process_type = pair.get("value") if isinstance(pair, dict) else None
+    return "hi_c" if process_type == HIC_LIB_PROCESS_TYPE else "short_read"
+
+
+def build_sequencing(
+    readsets: list, master_readset_codes: list, specimens: dict
+) -> list:
+    """Build one sequencing entry per sequencing type and specimen."""
+    masters = set(master_readset_codes)
+    groups = {}
+    for readset in readsets:
+        sequencing_type = readset_sequencing_type(readset)
+        if sequencing_type is None:
+            continue
+
+        sample_code = readset.get("sampleCode")
+        specimen = specimens.get(sample_code)
+        if specimen is None:
+            warn(
+                f"readset {readset.get('code')} sample {sample_code} has no "
+                "specimen code; skipping it"
+            )
+            continue
+
+        group = groups.setdefault(
+            (sequencing_type, specimen), {"dates": [], "main": False}
+        )
+        run_date = readset.get("runSequencingStartDate")
+        if run_date is None:
+            warn(f"readset {readset.get('code')} is missing runSequencingStartDate")
+        else:
+            group["dates"].append(run_date)
+        group["main"] = group["main"] or readset.get("code") in masters
+
+    sequencing = []
+    for key in sorted(groups, key=lambda k: (SEQUENCING_TYPE_ORDER.index(k[0]), k[1])):
+        sequencing_type, specimen = key
+        group = groups[key]
+        entry = {"sequencing_type": sequencing_type}
+        if group["dates"]:
+            # NGL stores run start dates as a local midnight; drop the offset to
+            # keep the rendered value a plain date and time.
+            start = datetime.fromtimestamp(
+                min(group["dates"]) / 1000, SUBMISSION_TIMEZONE
+            )
+            entry["creation_date"] = start.replace(tzinfo=None).isoformat(
+                timespec="seconds"
+            )
+        entry["main"] = group["main"]
+        entry["specimens"] = [specimen]
+        sequencing.append(entry)
+    return sequencing
 
 
 def main() -> int:
@@ -490,7 +584,22 @@ def main() -> int:
             session.headers.update(REQUEST_HEADERS)
             analysis = fetch_analysis(session, args.project, args.material)
             ngl = extract_analysis_values(analysis)
-            main_specimen_code = fetch_main_specimen_code(session, ngl["sample_code"])
+            readsets = fetch_readsets(session, ngl["readset_codes"])
+            sample_codes = {ngl["sample_code"]} | {
+                readset["sampleCode"]
+                for readset in readsets
+                if readset.get("sampleCode")
+            }
+            specimens = fetch_specimen_codes(session, sorted(sample_codes))
+        main_specimen_code = specimens.get(ngl["sample_code"])
+        if main_specimen_code is None:
+            raise SubmissionDataError(
+                f"NGL-SQ sample {ngl['sample_code']} is missing "
+                "properties.individualNumber.value"
+            )
+        sequencing = build_sequencing(
+            readsets, ngl["master_readset_codes"], specimens
+        )
         busco_path = resolve_busco_path(args.busco, ngl["result_directory"])
         busco = parse_busco_log(busco_path) if busco_path is not None else {}
         gfastats_path = resolve_gfastats_path(
@@ -498,7 +607,7 @@ def main() -> int:
         )
         gfastats = parse_gfastats(gfastats_path)
         submission = build_submission_json(
-            ngl, main_specimen_code, manifest, busco, gfastats
+            ngl, main_specimen_code, sequencing, manifest, busco, gfastats
         )
         with args.output.open("w", encoding="utf-8") as output_file:
             json.dump(submission, output_file, indent=4)
