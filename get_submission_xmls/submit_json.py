@@ -50,6 +50,8 @@ ANALYSIS_INCLUDES = (
     "properties.umbrellaProjectAccession",
     "properties.sequencingProjectAccession",
     "properties.primaryAssemblyProjectAccession",
+    "properties.tolid",
+    "properties.assemblyToDownloadVersion",
     "treatments.reviewing.pairs.completion",
     "treatments.reviewing.pairs.merquryScore",
     "treatments.reviewing.pairs.scoreBuscoEuk",
@@ -85,10 +87,13 @@ def warn(message: str) -> None:
     print(f"WARNING: {message}", file=sys.stderr)
 
 
-def mandatory_pair_value(container: dict, key: str, source: str):
+def mandatory_pair_value(container: dict, key: str, source: str, mandatory_field: str):
     pair = container.get(key)
     if not isinstance(pair, dict) or pair.get("value") is None:
-        raise SubmissionDataError(f"{source} is missing {key}.value")
+        raise SubmissionDataError(
+            f"{source} is missing {key}.value; {mandatory_field} could not be "
+            "retrieved and is mandatory in the submission JSON"
+        )
     return pair["value"]
 
 
@@ -180,6 +185,10 @@ def extract_analysis_values(analysis: dict) -> dict:
     if readset_codes and not master_readset_codes:
         warn("NGL-BI analysis has no master readset; no sequencing entry will be main")
 
+    tolid = mandatory_pair_value(
+        properties, "tolid", "NGL-BI properties", "ear_report"
+    )
+
     return {
         "bioproject_umbrella": optional_pair_value(
             properties,
@@ -188,11 +197,24 @@ def extract_analysis_values(analysis: dict) -> dict:
             "bioproject_umbrella",
         ),
         "bioproject_assembly": mandatory_pair_value(
-            properties, "primaryAssemblyProjectAccession", "NGL-BI properties"
+            properties,
+            "primaryAssemblyProjectAccession",
+            "NGL-BI properties",
+            "bioproject_assembly",
         ),
         "bioproject_reads": mandatory_pair_value(
-            properties, "sequencingProjectAccession", "NGL-BI properties"
+            properties,
+            "sequencingProjectAccession",
+            "NGL-BI properties",
+            "bioproject_reads",
         ),
+        "assembly_name": mandatory_pair_value(
+            properties,
+            "assemblyToDownloadVersion",
+            "NGL-BI properties",
+            "assembly_name",
+        ),
+        "ear_report": f"EARs/{tolid}_EAR.pdf",
         "sample_code": sample_codes[0],
         "readset_codes": readset_codes,
         "master_readset_codes": master_readset_codes,
@@ -399,30 +421,27 @@ def parse_manifest(path: Path) -> dict:
     return fields
 
 
-def extract_manifest_values(manifest: dict) -> dict:
-    assembly_name = manifest.get("ASSEMBLYNAME")
-    if not assembly_name:
-        raise SubmissionDataError("manifest is missing required field: ASSEMBLYNAME")
+def extract_ena_sample_code(manifest: dict, assembly_name: str) -> str | None:
+    """Read the manifest SAMPLE field, cross-checking ASSEMBLYNAME against NGL-BI."""
+    manifest_assembly_name = manifest.get("ASSEMBLYNAME")
+    if manifest_assembly_name and manifest_assembly_name != assembly_name:
+        warn(
+            f"manifest ASSEMBLYNAME ({manifest_assembly_name}) does not match the "
+            f"NGL-BI assembly name ({assembly_name}); NGL-BI wins"
+        )
 
     ena_sample_code = manifest.get("SAMPLE")
     if not ena_sample_code:
         warn("manifest is missing SAMPLE; skipping ena_sample_code")
-        ena_sample_code = None
-
-    tolid = assembly_name.split(".", 1)[0]
-
-    return {
-        "ena_sample_code": ena_sample_code,
-        "assembly_name": assembly_name,
-        "ear_report": f"EARs/{tolid}_EAR.pdf",
-    }
+        return None
+    return ena_sample_code
 
 
 def build_submission_json(
     ngl: dict,
     main_specimen_code: str,
     sequencing: list,
-    manifest: dict,
+    ena_sample_code: str | None,
     busco: dict,
     gfastats: dict,
 ) -> dict:
@@ -455,9 +474,9 @@ def build_submission_json(
         "busco_lin_nbgenes": lineage.get("nbgenes"),
         "merqury_completion": ngl["merqury_completion"],
         "merqury_score": ngl["merqury_score"],
-        "ena_sample_code": manifest["ena_sample_code"],
-        "assembly_name": manifest["assembly_name"],
-        "ear_report": manifest["ear_report"],
+        "ena_sample_code": ena_sample_code,
+        "assembly_name": ngl["assembly_name"],
+        "ear_report": ngl["ear_report"],
         "sequencing": sequencing or None,
         "busco_version": busco.get("version"),
         "busco_dataset_version": busco.get("dataset_version"),
@@ -554,7 +573,9 @@ def main() -> int:
     parser.add_argument("--project", required=True, help="NGL project code")
     parser.add_argument("--material", required=True, help="NGL material code")
     parser.add_argument(
-        "--manifest", required=True, type=Path, help="Path to the ENA manifest file"
+        "--manifest",
+        type=Path,
+        help="Path to the ENA manifest file; only its SAMPLE field is used",
     )
     parser.add_argument(
         "--busco",
@@ -579,7 +600,6 @@ def main() -> int:
     args = parser.parse_args()
 
     try:
-        manifest = extract_manifest_values(parse_manifest(args.manifest))
         with requests.Session() as session:
             session.headers.update(REQUEST_HEADERS)
             analysis = fetch_analysis(session, args.project, args.material)
@@ -591,6 +611,13 @@ def main() -> int:
                 if readset.get("sampleCode")
             }
             specimens = fetch_specimen_codes(session, sorted(sample_codes))
+        if args.manifest is None:
+            warn("no manifest provided; skipping ena_sample_code")
+            ena_sample_code = None
+        else:
+            ena_sample_code = extract_ena_sample_code(
+                parse_manifest(args.manifest), ngl["assembly_name"]
+            )
         main_specimen_code = specimens.get(ngl["sample_code"])
         if main_specimen_code is None:
             raise SubmissionDataError(
@@ -607,7 +634,7 @@ def main() -> int:
         )
         gfastats = parse_gfastats(gfastats_path)
         submission = build_submission_json(
-            ngl, main_specimen_code, sequencing, manifest, busco, gfastats
+            ngl, main_specimen_code, sequencing, ena_sample_code, busco, gfastats
         )
         with args.output.open("w", encoding="utf-8") as output_file:
             json.dump(submission, output_file, indent=4)

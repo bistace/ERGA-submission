@@ -9,6 +9,8 @@
     "bioproject_umbrella": "string",
     "bioproject_assembly": "string", // (mandatory)
     "bioproject_reads": "string", // (mandatory)
+    "assembly_name": "string", // "assemblyToDownloadVersion" in NGL (mandatory)
+    "ear_report": "string", // "EARs/<tolid>_EAR.pdf", tolid from NGL (mandatory)
     "atlaseaid_prefix": "", // Leave empty for now
     "main_specimen_code": "string", // "Code unique individu" in NGL (mandatory)
     "assembly_accession": "", // leave empty for now
@@ -35,10 +37,8 @@
             "specimens": ["A-76EV3UNTE"] // "Code unique individu" of the readset sample
         }
     ],
-    // Known by parsing the submission manifest
+    // Known by parsing the submission manifest, which is optional
     "ena_sample_code": "string", // SAMPLE field
-    "assembly_name": "string", // ASSEMBLY NAME field (mandatory)
-    "ear_report": "string", // "EARs/tolid_EAR.pdf (mandatory)
     // Known by parsing busco logs
     "busco_version": "0.0.0",
     "busco_dataset_version": "odb12",
