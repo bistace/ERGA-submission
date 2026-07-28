@@ -32,6 +32,11 @@ GFASTATS_FIELDS = {
     "Contig L50": ("l50_contigs", int),
     "Contig L90": ("l90_contigs", int),
 }
+# Metrics without which the submission JSON is not usable; every other gfastats
+# metric is reported as missing and left out of the output.
+GFASTATS_MANDATORY_FIELDS = ("size", "gc_content")
+SEQUENCING_PLATFORMS = ("PacBio", "ONT", "Arima", "OmniC")
+LONG_READ_PLATFORMS = ("PacBio", "ONT")
 
 ANALYSIS_INCLUDES = (
     "sampleCodes",
@@ -61,11 +66,53 @@ class SubmissionDataError(Exception):
     pass
 
 
-def required_pair_value(container: dict, key: str, source: str):
+def warn(message: str) -> None:
+    print(f"WARNING: {message}", file=sys.stderr)
+
+
+def mandatory_pair_value(container: dict, key: str, source: str):
     pair = container.get(key)
     if not isinstance(pair, dict) or pair.get("value") is None:
         raise SubmissionDataError(f"{source} is missing {key}.value")
     return pair["value"]
+
+
+def optional_pair_value(container: dict, key: str, source: str, skipped: str):
+    pair = container.get(key)
+    if not isinstance(pair, dict) or pair.get("value") is None:
+        warn(f"{source} is missing {key}.value; skipping {skipped}")
+        return None
+    return pair["value"]
+
+
+def optional_pair_float(container: dict, key: str, source: str, skipped: str):
+    value = optional_pair_value(container, key, source, skipped)
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        warn(f"{source} has an invalid {key}.value ({value!r}); skipping {skipped}")
+        return None
+
+
+def optional_busco_score(container: dict, key: str, source: str, skipped: str):
+    value = optional_pair_value(container, key, source, skipped)
+    if value is None:
+        return None
+
+    match = BUSCO_SCORE_PATTERN.fullmatch(value) if isinstance(value, str) else None
+    if match is None:
+        warn(f"{source} has an invalid {key}.value ({value!r}); skipping {skipped}")
+        return None
+
+    return {
+        "s": float(match.group("s")),
+        "d": float(match.group("d")),
+        "m": float(match.group("m")),
+        "f": float(match.group("f")),
+        "nbgenes": int(match.group("n")),
+    }
 
 
 def fetch_analysis(session: requests.Session, project: str, material: str) -> dict:
@@ -88,7 +135,8 @@ def extract_analysis_values(analysis: dict) -> dict:
     reviewing = treatments.get("reviewing") if isinstance(treatments, dict) else None
     pairs = reviewing.get("pairs") if isinstance(reviewing, dict) else None
     if not isinstance(pairs, dict):
-        raise SubmissionDataError("NGL-BI analysis is missing the reviewing treatment")
+        warn("NGL-BI analysis is missing the reviewing treatment")
+        pairs = {}
 
     sample_codes = analysis.get("sampleCodes")
     if not isinstance(sample_codes, list) or len(sample_codes) != 1:
@@ -103,51 +151,38 @@ def extract_analysis_values(analysis: dict) -> dict:
         if isinstance(result_directory_pair, dict)
         else None
     )
+    reviewing_source = "NGL-BI reviewing treatment"
 
     return {
-        "bioproject_umbrella": required_pair_value(
-            properties, "umbrellaProjectAccession", "NGL-BI properties"
+        "bioproject_umbrella": optional_pair_value(
+            properties,
+            "umbrellaProjectAccession",
+            "NGL-BI properties",
+            "bioproject_umbrella",
         ),
-        "bioproject_assembly": required_pair_value(
+        "bioproject_assembly": mandatory_pair_value(
             properties, "primaryAssemblyProjectAccession", "NGL-BI properties"
         ),
-        "bioproject_reads": required_pair_value(
+        "bioproject_reads": mandatory_pair_value(
             properties, "sequencingProjectAccession", "NGL-BI properties"
         ),
         "sample_code": sample_codes[0],
-        "busco_euk": parse_busco_score(
-            required_pair_value(pairs, "scoreBuscoEuk", "NGL-BI reviewing treatment")
+        "busco_euk": optional_busco_score(
+            pairs, "scoreBuscoEuk", reviewing_source, "the busco_euk_* fields"
         ),
-        "busco_lin": parse_busco_score(
-            required_pair_value(pairs, "scoreBuscoTaxon", "NGL-BI reviewing treatment")
+        "busco_lin": optional_busco_score(
+            pairs, "scoreBuscoTaxon", reviewing_source, "the busco_lin_* fields"
         ),
-        "busco_lin_dataset": required_pair_value(
-            pairs, "taxonBusco", "NGL-BI reviewing treatment"
+        "busco_lin_dataset": optional_pair_value(
+            pairs, "taxonBusco", reviewing_source, "busco_lin_dataset"
         ),
-        "merqury_completion": float(
-            required_pair_value(pairs, "completion", "NGL-BI reviewing treatment")
+        "merqury_completion": optional_pair_float(
+            pairs, "completion", reviewing_source, "merqury_completion"
         ),
-        "merqury_score": float(
-            required_pair_value(pairs, "merquryScore", "NGL-BI reviewing treatment")
+        "merqury_score": optional_pair_float(
+            pairs, "merquryScore", reviewing_source, "merqury_score"
         ),
         "result_directory": result_directory,
-    }
-
-
-def parse_busco_score(score: str) -> dict:
-    if not isinstance(score, str):
-        raise SubmissionDataError(f"invalid NGL-BI BUSCO score: {score!r}")
-
-    match = BUSCO_SCORE_PATTERN.fullmatch(score)
-    if match is None:
-        raise SubmissionDataError(f"invalid NGL-BI BUSCO score: {score!r}")
-
-    return {
-        "s": float(match.group("s")),
-        "d": float(match.group("d")),
-        "m": float(match.group("m")),
-        "f": float(match.group("f")),
-        "nbgenes": int(match.group("n")),
     }
 
 
@@ -178,52 +213,69 @@ def fetch_main_specimen_code(session: requests.Session, sample_code: str) -> str
     properties = samples[0].get("properties")
     if not isinstance(properties, dict):
         raise SubmissionDataError(f"NGL-SQ sample {sample_code} is missing properties")
-    return required_pair_value(
+    return mandatory_pair_value(
         properties, "individualNumber", f"NGL-SQ sample {sample_code} properties"
     )
 
 
-def resolve_busco_path(override: Path | None, result_directory: str | None) -> Path:
+def resolve_busco_path(override: Path | None, result_directory: str | None) -> Path | None:
+    skipped = "busco_version and busco_dataset_version"
     if override is not None:
         if not override.is_file():
             raise SubmissionDataError(f"BUSCO log was not found: {override}")
         return override
 
     if not result_directory:
-        raise SubmissionDataError(
-            "NGL-BI reviewing treatment is missing resultDirectory.value"
+        warn(
+            "NGL-BI reviewing treatment is missing resultDirectory.value; "
+            f"skipping {skipped}"
         )
+        return None
 
     busco_directory = Path(result_directory) / BUSCO_RELATIVE_DIRECTORY
     matches = list(busco_directory.glob(BUSCO_FILENAME_PATTERN))
     if not matches:
-        raise SubmissionDataError(
-            f"no BUSCO log matching {BUSCO_FILENAME_PATTERN} in {busco_directory}"
+        warn(
+            f"no BUSCO log matching {BUSCO_FILENAME_PATTERN} in {busco_directory}; "
+            f"skipping {skipped}"
         )
+        return None
     if len(matches) > 1:
-        raise SubmissionDataError(
-            f"multiple BUSCO logs matching {BUSCO_FILENAME_PATTERN} in {busco_directory}"
+        warn(
+            f"multiple BUSCO logs matching {BUSCO_FILENAME_PATTERN} in "
+            f"{busco_directory}; skipping {skipped}"
         )
+        return None
     return matches[0]
 
 
 def parse_busco_log(path: Path) -> dict:
-    with path.open(encoding="utf-8") as busco_file:
-        log = json.load(busco_file)
+    try:
+        with path.open(encoding="utf-8") as busco_file:
+            log = json.load(busco_file)
+    except (OSError, ValueError) as error:
+        warn(
+            f"BUSCO log {path} could not be read ({error}); "
+            "skipping busco_version and busco_dataset_version"
+        )
+        return {}
 
     versions = log.get("versions") if isinstance(log, dict) else None
     version = versions.get("busco") if isinstance(versions, dict) else None
     if not isinstance(version, str) or not version:
-        raise SubmissionDataError(f"BUSCO log is missing versions.busco: {path}")
+        warn(f"BUSCO log is missing versions.busco ({path}); skipping busco_version")
+        version = None
 
-    parameters = log.get("parameters")
+    parameters = log.get("parameters") if isinstance(log, dict) else None
     dataset_version = (
         parameters.get("datasets_version") if isinstance(parameters, dict) else None
     )
     if not isinstance(dataset_version, str) or not dataset_version:
-        raise SubmissionDataError(
-            f"BUSCO log is missing parameters.datasets_version: {path}"
+        warn(
+            f"BUSCO log is missing parameters.datasets_version ({path}); "
+            "skipping busco_dataset_version"
         )
+        dataset_version = None
 
     return {"version": version, "dataset_version": dataset_version}
 
@@ -231,7 +283,7 @@ def parse_busco_log(path: Path) -> dict:
 def resolve_gfastats_path(
     override: Path | None,
     result_directory: str | None,
-    lineage_dataset: str,
+    lineage_dataset: str | None,
 ) -> Path:
     if override is not None:
         if not override.is_file():
@@ -258,6 +310,7 @@ def resolve_gfastats_path(
 
 def parse_gfastats(path: Path) -> dict:
     metrics = {}
+    invalid_fields = set()
     with path.open(encoding="utf-8") as gfastats_file:
         for line in gfastats_file:
             label, separator, raw_value = line.strip().partition(":")
@@ -265,22 +318,29 @@ def parse_gfastats(path: Path) -> dict:
                 continue
 
             output_field, converter = GFASTATS_FIELDS[label]
+            value = raw_value.strip()
             try:
-                metrics[output_field] = converter(raw_value.strip())
+                metrics[output_field] = converter(value)
             except ValueError as error:
-                raise SubmissionDataError(
-                    f"invalid {label} value in gfastats file {path}: {raw_value.strip()!r}"
-                ) from error
+                message = f"invalid {label} value in gfastats file {path}: {value!r}"
+                if output_field in GFASTATS_MANDATORY_FIELDS:
+                    raise SubmissionDataError(message) from error
+                warn(f"{message}; skipping {output_field}")
+                invalid_fields.add(output_field)
 
-    missing_fields = [
+    missing_mandatory = [
         output_field
-        for output_field, _ in GFASTATS_FIELDS.values()
+        for output_field in GFASTATS_MANDATORY_FIELDS
         if output_field not in metrics
     ]
-    if missing_fields:
+    if missing_mandatory:
         raise SubmissionDataError(
-            f"gfastats file is missing required metric(s): {', '.join(missing_fields)}"
+            f"gfastats file is missing required metric(s): {', '.join(missing_mandatory)}"
         )
+
+    for output_field, _ in GFASTATS_FIELDS.values():
+        if output_field not in metrics and output_field not in invalid_fields:
+            warn(f"gfastats file {path} is missing {output_field}; skipping it")
     return metrics
 
 
@@ -294,32 +354,44 @@ def parse_manifest(path: Path) -> dict:
     return fields
 
 
-def extract_manifest_values(manifest: dict) -> dict:
-    required_fields = ("SAMPLE", "ASSEMBLYNAME", "PLATFORM")
-    missing_fields = [field for field in required_fields if not manifest.get(field)]
-    if missing_fields:
-        raise SubmissionDataError(
-            f"manifest is missing required field(s): {', '.join(missing_fields)}"
-        )
+def extract_sequencing(raw_platforms: str | None) -> list | None:
+    if not raw_platforms:
+        warn("manifest is missing PLATFORM; skipping sequencing")
+        return None
 
-    assembly_name = manifest["ASSEMBLYNAME"]
-    tolid = assembly_name.split(".", 1)[0]
-    platforms = [platform.strip() for platform in manifest["PLATFORM"].split(",")]
-    if not any(platform in {"PacBio", "ONT"} for platform in platforms):
-        raise SubmissionDataError(
-            "manifest PLATFORM must contain at least one of PacBio or ONT"
-        )
+    platforms = [platform.strip() for platform in raw_platforms.split(",")]
+    if not any(platform in LONG_READ_PLATFORMS for platform in platforms):
+        warn(f"manifest PLATFORM ({raw_platforms!r}) contains neither PacBio nor ONT")
+
     sequencing = [
-        platform
-        for platform in platforms
-        if platform in {"PacBio", "ONT", "Arima", "OmniC"}
+        platform for platform in platforms if platform in SEQUENCING_PLATFORMS
     ]
+    if not sequencing:
+        warn(
+            f"manifest PLATFORM ({raw_platforms!r}) has no known platform; "
+            "skipping sequencing"
+        )
+        return None
+    return sequencing
+
+
+def extract_manifest_values(manifest: dict) -> dict:
+    assembly_name = manifest.get("ASSEMBLYNAME")
+    if not assembly_name:
+        raise SubmissionDataError("manifest is missing required field: ASSEMBLYNAME")
+
+    ena_sample_code = manifest.get("SAMPLE")
+    if not ena_sample_code:
+        warn("manifest is missing SAMPLE; skipping ena_sample_code")
+        ena_sample_code = None
+
+    tolid = assembly_name.split(".", 1)[0]
 
     return {
-        "ena_sample_code": manifest["SAMPLE"],
+        "ena_sample_code": ena_sample_code,
         "assembly_name": assembly_name,
         "ear_report": f"EARs/{tolid}_EAR.pdf",
-        "sequencing": sequencing,
+        "sequencing": extract_sequencing(manifest.get("PLATFORM")),
     }
 
 
@@ -330,10 +402,10 @@ def build_submission_json(
     busco: dict,
     gfastats: dict,
 ) -> dict:
-    euk = ngl["busco_euk"]
-    lineage = ngl["busco_lin"]
+    euk = ngl["busco_euk"] or {}
+    lineage = ngl["busco_lin"] or {}
 
-    return {
+    submission = {
         "main": True,
         "submission_date": datetime.now(SUBMISSION_TIMEZONE).isoformat(
             timespec="milliseconds"
@@ -345,39 +417,40 @@ def build_submission_json(
         "atlaseaid_prefix": "",
         "main_specimen_code": main_specimen_code,
         "assembly_accession": "",
-        "busco_euk_genome_s": euk["s"],
-        "busco_euk_genome_d": euk["d"],
-        "busco_euk_genome_m": euk["m"],
-        "busco_euk_genome_f": euk["f"],
-        "busco_euk_dataset": "eukaryota",
-        "busco_euk_nbgenes": euk["nbgenes"],
-        "busco_lin_genome_s": lineage["s"],
-        "busco_lin_genome_d": lineage["d"],
-        "busco_lin_genome_m": lineage["m"],
-        "busco_lin_genome_f": lineage["f"],
+        "busco_euk_genome_s": euk.get("s"),
+        "busco_euk_genome_d": euk.get("d"),
+        "busco_euk_genome_m": euk.get("m"),
+        "busco_euk_genome_f": euk.get("f"),
+        "busco_euk_dataset": "eukaryota" if euk else None,
+        "busco_euk_nbgenes": euk.get("nbgenes"),
+        "busco_lin_genome_s": lineage.get("s"),
+        "busco_lin_genome_d": lineage.get("d"),
+        "busco_lin_genome_m": lineage.get("m"),
+        "busco_lin_genome_f": lineage.get("f"),
         "busco_lin_dataset": ngl["busco_lin_dataset"],
-        "busco_lin_nbgenes": lineage["nbgenes"],
+        "busco_lin_nbgenes": lineage.get("nbgenes"),
         "merqury_completion": ngl["merqury_completion"],
         "merqury_score": ngl["merqury_score"],
         "ena_sample_code": manifest["ena_sample_code"],
         "assembly_name": manifest["assembly_name"],
         "ear_report": manifest["ear_report"],
         "sequencing": manifest["sequencing"],
-        "busco_version": busco["version"],
-        "busco_dataset_version": busco["dataset_version"],
-        "nb_scaffolds": gfastats["nb_scaffolds"],
+        "busco_version": busco.get("version"),
+        "busco_dataset_version": busco.get("dataset_version"),
+        "nb_scaffolds": gfastats.get("nb_scaffolds"),
         "size": gfastats["size"],
         "gc_content": gfastats["gc_content"],
-        "n50_scaffolds": gfastats["n50_scaffolds"],
-        "n90_scaffolds": gfastats["n90_scaffolds"],
-        "l50_scaffolds": gfastats["l50_scaffolds"],
-        "l90_scaffolds": gfastats["l90_scaffolds"],
-        "nb_contigs": gfastats["nb_contigs"],
-        "n50_contigs": gfastats["n50_contigs"],
-        "n90_contigs": gfastats["n90_contigs"],
-        "l50_contigs": gfastats["l50_contigs"],
-        "l90_contigs": gfastats["l90_contigs"],
+        "n50_scaffolds": gfastats.get("n50_scaffolds"),
+        "n90_scaffolds": gfastats.get("n90_scaffolds"),
+        "l50_scaffolds": gfastats.get("l50_scaffolds"),
+        "l90_scaffolds": gfastats.get("l90_scaffolds"),
+        "nb_contigs": gfastats.get("nb_contigs"),
+        "n50_contigs": gfastats.get("n50_contigs"),
+        "n90_contigs": gfastats.get("n90_contigs"),
+        "l50_contigs": gfastats.get("l50_contigs"),
+        "l90_contigs": gfastats.get("l90_contigs"),
     }
+    return {key: value for key, value in submission.items() if value is not None}
 
 
 def main() -> int:
@@ -419,7 +492,7 @@ def main() -> int:
             ngl = extract_analysis_values(analysis)
             main_specimen_code = fetch_main_specimen_code(session, ngl["sample_code"])
         busco_path = resolve_busco_path(args.busco, ngl["result_directory"])
-        busco = parse_busco_log(busco_path)
+        busco = parse_busco_log(busco_path) if busco_path is not None else {}
         gfastats_path = resolve_gfastats_path(
             args.gfastats, ngl["result_directory"], ngl["busco_lin_dataset"]
         )

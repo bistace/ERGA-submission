@@ -1,13 +1,16 @@
+// Fields marked (mandatory) abort submit_json when they cannot be resolved.
+// Every other field is dropped from the output, with a warning, when its source
+// value is missing or unusable.
 {
     "main": true, // always true for now
-    "submission_date": "2026-07-16T13:11:14.977Z", // today's date when submitting
-    "assembly_level": "chromosome", // always chromosomes for now 
+    "submission_date": "2026-07-16T13:11:14.977Z", // today's date when submitting (mandatory)
+    "assembly_level": "chromosome", // always chromosomes for now (mandatory)
     // Known by parsing NGL
     "bioproject_umbrella": "string",
-    "bioproject_assembly": "string",
-    "bioproject_reads": "string",
+    "bioproject_assembly": "string", // (mandatory)
+    "bioproject_reads": "string", // (mandatory)
     "atlaseaid_prefix": "", // Leave empty for now
-    "main_specimen_code": "string", // "Code unique individu" in NGL
+    "main_specimen_code": "string", // "Code unique individu" in NGL (mandatory)
     "assembly_accession": "", // leave empty for now
     "busco_euk_genome_s": 0,
     "busco_euk_genome_d": 0,
@@ -25,16 +28,16 @@
     "merqury_score": 0.0,
     // Known by parsing the submission manifest
     "ena_sample_code": "string", // SAMPLE field
-    "assembly_name": "string", // ASSEMBLY NAME field
-    "ear_report": "string", // "EARs/tolid_EAR.pdf
+    "assembly_name": "string", // ASSEMBLY NAME field (mandatory)
+    "ear_report": "string", // "EARs/tolid_EAR.pdf (mandatory)
     "sequencing": [], // PLATFORM field, "PacBio" and or "ONT" + HiC technology
     // Known by parsing busco logs
     "busco_version": "0.0.0",
     "busco_dataset_version": "odb12",
     // Known by parsing gfastats logs
     "nb_scaffolds": 0,
-    "size": 0,
-    "gc_content": 0,
+    "size": 0, // (mandatory)
+    "gc_content": 0, // (mandatory)
     "n50_scaffolds": 0,
     "n90_scaffolds": 0,
     "l50_scaffolds": 0,
