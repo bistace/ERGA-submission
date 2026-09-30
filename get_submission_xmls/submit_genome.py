@@ -321,7 +321,11 @@ def submit_genome(webin_cli_jar, manifest_path, account, password):
 
 
 def run_create_bytesea_json(project, material, manifest_path, tolid):
-    """Write the BytESea assembly metrics JSON into the pending directory."""
+    """Write the BytESea assembly metrics JSON into the pending directory.
+
+    The file is made a+rwx so that whoever submits it to BytESea can move it out
+    of the pending directory, whichever team member created it.
+    """
     output_path = os.path.join(BYTESEA_PENDING_DIRECTORY, f"{tolid}.json")
     json_cmd = [
         "create_bytesea_json",
@@ -343,6 +347,19 @@ def run_create_bytesea_json(project, material, manifest_path, tolid):
         json_succeeded = json_result.returncode == 0
 
     if json_succeeded:
+        try:
+            # Only the owner may chmod; a teammate overwriting an existing
+            # a+rwx file must not fail here.
+            if os.stat(output_path).st_mode & 0o777 != 0o777:
+                os.chmod(output_path, 0o777)
+        except OSError as error:
+            print(
+                f"ERROR: Could not give a+rwx rights to {output_path}: {error}",
+                file=sys.stderr,
+            )
+            json_succeeded = False
+
+    if json_succeeded:
         return True
 
     print(
@@ -357,6 +374,7 @@ def run_create_bytesea_json(project, material, manifest_path, tolid):
     )
     print("To retry the BytESea JSON creation only, run:", file=sys.stderr)
     print(f"    {' '.join(json_cmd)}", file=sys.stderr)
+    print(f"    chmod a+rwx {output_path}", file=sys.stderr)
     return False
 
 
