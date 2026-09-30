@@ -14,6 +14,8 @@ import xml.etree.ElementTree as ET
 os.environ["CONFFILE"] = "/env/atelier/ngs_ba/cns/conf/prod_ba.conf"
 ngs_workflow.env.load_conf_file()
 
+BYTESEA_PENDING_DIRECTORY = "/env/cns/proj/projet_DKC/nda_bytesea/pending"
+
 
 def read_credentials(filename=os.path.join(os.environ["HOME"], ".EBI/ebi.ini")):
     config = configparser.ConfigParser()
@@ -90,7 +92,11 @@ def main():
             os.remove(webin_cli_jar)
 
     if args.project == "DKC":
-        if not run_submit_ear(args.project, args.material):
+        json_created = run_create_bytesea_json(
+            args.project, args.material, args.manifest, ngl_tolid
+        )
+        ear_uploaded = run_submit_ear(args.project, args.material)
+        if not (json_created and ear_uploaded):
             sys.exit(1)
 
 
@@ -312,6 +318,46 @@ def submit_genome(webin_cli_jar, manifest_path, account, password):
         sys.exit(1)
 
     print("Submission was successful", file=sys.stderr)
+
+
+def run_create_bytesea_json(project, material, manifest_path, tolid):
+    """Write the BytESea assembly metrics JSON into the pending directory."""
+    output_path = os.path.join(BYTESEA_PENDING_DIRECTORY, f"{tolid}.json")
+    json_cmd = [
+        "create_bytesea_json",
+        "--project",
+        project,
+        "--material",
+        material,
+        "--manifest",
+        manifest_path,
+        "--output",
+        output_path,
+    ]
+    try:
+        json_result = subprocess.run(json_cmd)
+    except OSError as error:
+        print(f"ERROR: Could not launch create_bytesea_json: {error}", file=sys.stderr)
+        json_succeeded = False
+    else:
+        json_succeeded = json_result.returncode == 0
+
+    if json_succeeded:
+        return True
+
+    print(
+        f"ERROR: BytESea JSON creation failed for project '{project}', "
+        f"material '{material}'.",
+        file=sys.stderr,
+    )
+    print(
+        "ENA genome submission and NGL-BI update completed successfully – "
+        "do not repeat those steps.",
+        file=sys.stderr,
+    )
+    print("To retry the BytESea JSON creation only, run:", file=sys.stderr)
+    print(f"    {' '.join(json_cmd)}", file=sys.stderr)
+    return False
 
 
 def run_submit_ear(project, material):
