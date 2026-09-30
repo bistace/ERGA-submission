@@ -1,4 +1,4 @@
-// Fields marked (mandatory) abort submit_json when they cannot be resolved.
+// Fields marked (mandatory) abort create_bytesea_json when they cannot be resolved.
 // Every other field is dropped from the output, with a warning, when its source
 // value is missing or unusable.
 {
