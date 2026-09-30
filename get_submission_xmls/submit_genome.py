@@ -71,9 +71,7 @@ def main():
     print(f"Manifest study: {study}")
     print(f"NGL-BI study:   {ngl_study}")
     print(f"Manifest assembly name: {assembly_name}")
-    print(f"NGL-BI ToLID:           {ngl_tolid}")
-    print(f"Manifest sample: {sample}")
-    print(f"EBI taxid:       {ebi_taxid}")
+    print(f"NGL-BI ToLID: /env/ig/containers/lbgb/apptainer/    {ebi_taxid}")
     print(f"NGL taxid:       {ngl_taxid}")
 
     cred_path = os.path.join(os.environ["HOME"], ".EBI/ebi.ini")
@@ -91,8 +89,9 @@ def main():
         if os.path.exists(webin_cli_jar):
             os.remove(webin_cli_jar)
 
-    if not run_submit_ear(args.project, args.material):
-        sys.exit(1)
+    if args.project == "DKC":
+        if not run_submit_ear(args.project, args.material):
+            sys.exit(1)
 
 
 # --- Manifest parsing ---
