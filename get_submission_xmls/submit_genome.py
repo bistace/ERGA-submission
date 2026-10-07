@@ -36,8 +36,7 @@ def main():
         "--alternate",
         action="store_true",
         help=(
-            "Validate STUDY against 'PRJEB Alternate Assemblage' instead of "
-            "'PRJEB Assemblage'"
+            "Validate STUDY against 'PRJEB Alternate Assemblage' instead of " "'PRJEB Assemblage'"
         ),
     )
 
@@ -71,10 +70,11 @@ def main():
         sys.exit(1)
 
     print(f"Manifest study: {study}")
-    print(f"NGL-BI study:   {ngl_study}")
+    print(f"  NGL-BI study: {ngl_study}")
     print(f"Manifest assembly name: {assembly_name}")
-    print(f"NGL-BI ToLID: /env/ig/containers/lbgb/apptainer/    {ebi_taxid}")
-    print(f"NGL taxid:       {ngl_taxid}")
+    print(f"             NGL tolid: {ngl_tolid}")
+    print(f"EBI taxid: {ebi_taxid}")
+    print(f"NGL taxid: {ngl_taxid}")
 
     cred_path = os.path.join(os.environ["HOME"], ".EBI/ebi.ini")
     if not os.path.exists(cred_path):
@@ -170,9 +170,7 @@ def extract_ngl_fields(assembly, sample, alternate=False):
     """Extract study accession, tolid and taxid from NGL-BI responses."""
     properties = assembly.get("properties", {})
     accession_property = (
-        "alternateAssemblyProjectAccession"
-        if alternate
-        else "primaryAssemblyProjectAccession"
+        "alternateAssemblyProjectAccession" if alternate else "primaryAssemblyProjectAccession"
     )
 
     ngl_study = properties.get(accession_property, {}).get("value")
@@ -363,8 +361,7 @@ def run_create_bytesea_json(project, material, manifest_path, tolid):
         return True
 
     print(
-        f"ERROR: BytESea JSON creation failed for project '{project}', "
-        f"material '{material}'.",
+        f"ERROR: BytESea JSON creation failed for project '{project}', " f"material '{material}'.",
         file=sys.stderr,
     )
     print(
@@ -399,8 +396,7 @@ def run_submit_ear(project, material):
         return True
 
     print(
-        f"ERROR: EAR report upload failed for project '{project}', "
-        f"material '{material}'.",
+        f"ERROR: EAR report upload failed for project '{project}', " f"material '{material}'.",
         file=sys.stderr,
     )
     print(
