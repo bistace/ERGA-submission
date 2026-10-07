@@ -198,7 +198,7 @@ def update_ngl(project_code: str, material_code: str, assembly_name: str):
     ngl.analyses.update_downloaded_from_ncbi(code, False)
     ngl.analyses.update_assembly_to_download_version(code, assembly_name)
     ngl.analyses.update_substate(code, "F-SUB")
-    ngl.analyses.update_validation(code, True)
+    ngl.analyses.update_validation(code, True, keep_comment=True)
 
 
 # --- EBI API ---
