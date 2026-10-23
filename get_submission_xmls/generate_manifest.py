@@ -56,23 +56,24 @@ def main():
         sys.exit(1)
 
     study, assembly_name, coverage = extract_fields(assembly_json)
+    sample = get_master_ena_sample(assembly_json)
     platform = determine_platform(assembly_json)
     program = determine_program(assembly_json)
     description = get_description(args.project, args.material)
 
     manifest = build_manifest(
-        study, assembly_name, coverage, program, platform, description, args.fasta
+        study, sample, assembly_name, coverage, program, platform, description, args.fasta
     )
     write_manifest(manifest, args.output)
 
     print(f"Manifest written to {args.output}", file=sys.stderr)
     print(f"  STUDY:        {study}", file=sys.stderr)
+    print(f"  SAMPLE:       {sample or 'blank, fill in manually'}", file=sys.stderr)
     print(f"  ASSEMBLYNAME: {assembly_name}", file=sys.stderr)
     print(f"  COVERAGE:     {coverage}", file=sys.stderr)
     print(f"  PROGRAM:      {program}", file=sys.stderr)
     print(f"  PLATFORM:     {platform}", file=sys.stderr)
     print(f"  DESCRIPTION:  {'set from EAR data' if description else 'blank'}", file=sys.stderr)
-    print("  SAMPLE left blank for manual entry.", file=sys.stderr)
 
 
 # --- NGL-BI API ---
@@ -103,6 +104,53 @@ def get_readset_typecode(readset_code: str) -> str:
         return ""
     res.raise_for_status()
     return res.json().get("typeCode", "")
+
+
+def get_master_ena_sample(assembly: dict) -> str:
+    """Return the ENA sample accession (refCollabSub) shared by all master readsets.
+
+    For pooled reads the master readsets carry the virtual sample's accession,
+    so all of them must agree; disagreement is a data error in NGL. SAMPLE is
+    left blank when the master readsets disagree or any lacks an accession.
+    """
+    master_codes = assembly.get("masterReadSetCodes") or []
+    if not master_codes:
+        print("WARNING: no master readset in NGL-BI, leaving SAMPLE blank", file=sys.stderr)
+        return ""
+
+    params = [("codes", code) for code in master_codes]
+    params += [("includes", "code"), ("includes", "properties.refCollabSub")]
+    res = requests.get(
+        "http://ngl-bi.genoscope.cns.fr/api/readsets",
+        params=params,
+        headers={"User-Agent": "bot"},
+    )
+    res.raise_for_status()
+    accessions = {
+        readset.get("code"): ((readset.get("properties") or {}).get("refCollabSub") or {}).get(
+            "value"
+        )
+        for readset in res.json()
+    }
+
+    missing = sorted(code for code in master_codes if not accessions.get(code))
+    if missing:
+        print(
+            f"WARNING: master readset(s) {', '.join(missing)} have no ENA sample "
+            "(refCollabSub), leaving SAMPLE blank",
+            file=sys.stderr,
+        )
+        return ""
+
+    distinct = sorted({accessions[code] for code in master_codes})
+    if len(distinct) > 1:
+        print(
+            f"WARNING: master readsets carry different ENA samples ({', '.join(distinct)}); "
+            "fix the master readsets in NGL, leaving SAMPLE blank",
+            file=sys.stderr,
+        )
+        return ""
+    return distinct[0]
 
 
 def determine_long_read(assembly: dict) -> str:
@@ -295,6 +343,7 @@ def get_description(project_code: str, material_code: str) -> str:
 
 def build_manifest(
     study: str,
+    sample: str,
     assembly_name: str,
     coverage: str,
     program: str,
@@ -305,7 +354,7 @@ def build_manifest(
     """Build the ordered list of (key, value) manifest lines."""
     return [
         ("STUDY", study),
-        ("SAMPLE", ""),
+        ("SAMPLE", sample),
         ("ASSEMBLYNAME", assembly_name),
         ("ASSEMBLY_TYPE", STATIC_FIELDS["ASSEMBLY_TYPE"]),
         ("COVERAGE", coverage),
