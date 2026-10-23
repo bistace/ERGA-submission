@@ -66,6 +66,7 @@ READSET_INCLUDES = (
     "sampleCode",
     "runSequencingStartDate",
     "sampleOnContainer.properties.libProcessTypeCode",
+    "properties.refCollabSub",
 )
 
 BUSCO_SCORE_PATTERN = re.compile(
@@ -421,19 +422,63 @@ def parse_manifest(path: Path) -> dict:
     return fields
 
 
-def extract_ena_sample_code(manifest: dict, assembly_name: str) -> str | None:
-    """Read the manifest SAMPLE field, cross-checking ASSEMBLYNAME against NGL-BI."""
-    manifest_assembly_name = manifest.get("ASSEMBLYNAME")
-    if manifest_assembly_name and manifest_assembly_name != assembly_name:
-        warn(
-            f"manifest ASSEMBLYNAME ({manifest_assembly_name}) does not match the "
-            f"NGL-BI assembly name ({assembly_name}); NGL-BI wins"
-        )
+def master_ena_sample_code(readsets: list, master_readset_codes: list) -> str | None:
+    """Return the ENA sample accession (refCollabSub) shared by all master readsets.
 
-    ena_sample_code = manifest.get("SAMPLE")
-    if not ena_sample_code:
-        warn("manifest is missing SAMPLE; skipping ena_sample_code")
+    For pooled reads the master readsets carry the virtual sample's accession,
+    so all of them must agree; disagreement is a data error in NGL. No value is
+    returned when the master readsets disagree or any lacks one.
+    """
+    masters = set(master_readset_codes)
+    accessions = {}
+    for readset in readsets:
+        if readset.get("code") not in masters:
+            continue
+        properties = readset.get("properties")
+        pair = properties.get("refCollabSub") if isinstance(properties, dict) else None
+        accessions[readset["code"]] = pair.get("value") if isinstance(pair, dict) else None
+
+    if not masters:
         return None
+    missing = sorted(masters - {code for code, value in accessions.items() if value})
+    if missing:
+        warn(
+            f"master readset(s) {', '.join(missing)} have no "
+            "properties.refCollabSub.value (ENA sample not submitted yet?)"
+        )
+        return None
+    distinct = set(accessions.values())
+    if len(distinct) > 1:
+        warn(
+            "master readsets carry different ENA samples "
+            f"({', '.join(sorted(distinct))}); fix the master readsets in NGL"
+        )
+        return None
+    return distinct.pop()
+
+
+def resolve_ena_sample_code(
+    manifest: dict | None, assembly_name: str, ngl_sample_code: str | None
+) -> str | None:
+    """Prefer the manifest SAMPLE (what ENA received); fall back to NGL."""
+    manifest_sample_code = None
+    if manifest is not None:
+        manifest_assembly_name = manifest.get("ASSEMBLYNAME")
+        if manifest_assembly_name and manifest_assembly_name != assembly_name:
+            warn(
+                f"manifest ASSEMBLYNAME ({manifest_assembly_name}) does not match the "
+                f"NGL-BI assembly name ({assembly_name}); NGL-BI wins"
+            )
+        manifest_sample_code = manifest.get("SAMPLE") or None
+
+    if manifest_sample_code and ngl_sample_code and manifest_sample_code != ngl_sample_code:
+        warn(
+            f"manifest SAMPLE ({manifest_sample_code}) differs from the master "
+            f"readset ENA sample ({ngl_sample_code}); using the manifest value"
+        )
+    ena_sample_code = manifest_sample_code or ngl_sample_code
+    if ena_sample_code is None:
+        warn("no ENA sample found in the manifest or NGL; skipping ena_sample_code")
     return ena_sample_code
 
 
@@ -575,7 +620,10 @@ def main() -> int:
     parser.add_argument(
         "--manifest",
         type=Path,
-        help="Path to the ENA manifest file; only its SAMPLE field is used",
+        help=(
+            "Path to the ENA manifest file; its SAMPLE overrides the ENA sample "
+            "read from the master readsets"
+        ),
     )
     parser.add_argument(
         "--busco",
@@ -611,13 +659,12 @@ def main() -> int:
                 if readset.get("sampleCode")
             }
             specimens = fetch_specimen_codes(session, sorted(sample_codes))
-        if args.manifest is None:
-            warn("no manifest provided; skipping ena_sample_code")
-            ena_sample_code = None
-        else:
-            ena_sample_code = extract_ena_sample_code(
-                parse_manifest(args.manifest), ngl["assembly_name"]
-            )
+        manifest = None if args.manifest is None else parse_manifest(args.manifest)
+        ena_sample_code = resolve_ena_sample_code(
+            manifest,
+            ngl["assembly_name"],
+            master_ena_sample_code(readsets, ngl["master_readset_codes"]),
+        )
         main_specimen_code = specimens.get(ngl["sample_code"])
         if main_specimen_code is None:
             raise SubmissionDataError(
