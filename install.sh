@@ -12,6 +12,7 @@ mkdir -p bin
 cd bin
 ln -s ../get_submission_xmls/create_bytesea_json.py create_bytesea_json
 ln -s ../get_submission_xmls/generate_manifest.py generate_manifest
+ln -s ../get_submission_xmls/push_bytesea_json.py push_bytesea_json
 ln -s ../get_submission_xmls/release_erz.py release_erz
 ln -s ../get_submission_xmls/submit_ear.py submit_ear
 ln -s ../get_submission_xmls/submit_genome.py submit_genome
