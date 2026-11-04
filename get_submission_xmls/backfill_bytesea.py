@@ -8,6 +8,7 @@ pending directory. Genomes without an EAR report are skipped with a warning.
 """
 import argparse
 import csv
+import gzip
 import io
 import os
 import subprocess
@@ -100,19 +101,16 @@ def backfill_genome(tolid, assembly_name, sample, ba_code, ear_path, workdir):
         warn(f"{tolid} ({ba_code}) has no EAR report ({ear_path or 'not set in NGL-BI'}), skipping")
         return False
 
-    ear_cmd = ["submit_ear", "--project", project, "--material", material, "--ear", ear_path]
-    if subprocess.run(ear_cmd).returncode != 0:
-        warn(f"{tolid} ({ba_code}): EAR upload failed, skipping")
-        return False
-
     manifest_path = os.path.join(workdir, f"{tolid}.manifest.txt")
+    # Already submitted: the FASTA is never read, but generate_manifest requires
+    # an existing gzipped file. An empty gzip stream satisfies its check.
+    placeholder_fasta = os.path.join(workdir, f"{tolid}.fa.gz")
+    gzip.open(placeholder_fasta, "wb").close()
     manifest_cmd = [
         "generate_manifest",
         "--project", project,
         "--material", material,
-        # Already submitted: FASTA is only a placeholder, the manifest feeds
-        # SAMPLE and ASSEMBLYNAME.
-        "--fasta", f"{tolid}.fa.gz",
+        "--fasta", placeholder_fasta,
         "--output", manifest_path,
     ]
     if subprocess.run(manifest_cmd).returncode != 0:
@@ -120,6 +118,11 @@ def backfill_genome(tolid, assembly_name, sample, ba_code, ear_path, workdir):
         return False
     # generate_manifest always writes "<tolid>.1"; use what ENA actually holds.
     set_manifest_fields(manifest_path, {"SAMPLE": sample, "ASSEMBLYNAME": assembly_name})
+
+    ear_cmd = ["submit_ear", "--project", project, "--material", material, "--ear", ear_path]
+    if subprocess.run(ear_cmd).returncode != 0:
+        warn(f"{tolid} ({ba_code}): EAR upload failed, skipping")
+        return False
 
     if not write_pending_bytesea_json(project, material, manifest_path, tolid):
         warn(f"{tolid} ({ba_code}): BYTESea JSON creation failed")
