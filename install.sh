@@ -10,6 +10,7 @@ pip install --prefix . --ignore-installed -r requirements.txt
 
 mkdir -p bin
 cd bin
+ln -s ../get_submission_xmls/backfill_bytesea.py backfill_bytesea
 ln -s ../get_submission_xmls/create_bytesea_json.py create_bytesea_json
 ln -s ../get_submission_xmls/generate_manifest.py generate_manifest
 ln -s ../get_submission_xmls/push_bytesea_json.py push_bytesea_json
