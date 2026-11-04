@@ -91,7 +91,8 @@ def main():
         if os.path.exists(webin_cli_jar):
             os.remove(webin_cli_jar)
 
-    if args.project == "DKC":
+    # BYTESea and the EAR describe the primary assembly only.
+    if args.project == "DKC" and not args.alternate:
         json_created = run_create_bytesea_json(
             args.project, args.material, args.manifest, ngl_tolid
         )
