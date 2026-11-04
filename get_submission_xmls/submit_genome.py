@@ -318,12 +318,8 @@ def submit_genome(webin_cli_jar, manifest_path, account, password):
     print("Submission was successful", file=sys.stderr)
 
 
-def run_create_bytesea_json(project, material, manifest_path, tolid):
-    """Write the BytESea assembly metrics JSON into the pending directory.
-
-    The file is made a+rwx so that whoever submits it to BytESea can move it out
-    of the pending directory, whichever team member created it.
-    """
+def bytesea_json_command(project, material, manifest_path, tolid):
+    """Return the create_bytesea_json command and its pending output path."""
     output_path = os.path.join(BYTESEA_PENDING_DIRECTORY, f"{tolid}.json")
     json_cmd = [
         "create_bytesea_json",
@@ -336,32 +332,46 @@ def run_create_bytesea_json(project, material, manifest_path, tolid):
         "--output",
         output_path,
     ]
+    return json_cmd, output_path
+
+
+def write_pending_bytesea_json(project, material, manifest_path, tolid):
+    """Write the BYTESea assembly metrics JSON into the pending directory.
+
+    The file is made a+rwx so that whoever submits it to BYTESea can move it out
+    of the pending directory, whichever team member created it.
+    """
+    json_cmd, output_path = bytesea_json_command(project, material, manifest_path, tolid)
     try:
         json_result = subprocess.run(json_cmd)
     except OSError as error:
         print(f"ERROR: Could not launch create_bytesea_json: {error}", file=sys.stderr)
-        json_succeeded = False
-    else:
-        json_succeeded = json_result.returncode == 0
+        return False
+    if json_result.returncode != 0:
+        return False
 
-    if json_succeeded:
-        try:
-            # Only the owner may chmod; a teammate overwriting an existing
-            # a+rwx file must not fail here.
-            if os.stat(output_path).st_mode & 0o777 != 0o777:
-                os.chmod(output_path, 0o777)
-        except OSError as error:
-            print(
-                f"ERROR: Could not give a+rwx rights to {output_path}: {error}",
-                file=sys.stderr,
-            )
-            json_succeeded = False
+    try:
+        # Only the owner may chmod; a teammate overwriting an existing
+        # a+rwx file must not fail here.
+        if os.stat(output_path).st_mode & 0o777 != 0o777:
+            os.chmod(output_path, 0o777)
+    except OSError as error:
+        print(
+            f"ERROR: Could not give a+rwx rights to {output_path}: {error}",
+            file=sys.stderr,
+        )
+        return False
+    return True
 
-    if json_succeeded:
+
+def run_create_bytesea_json(project, material, manifest_path, tolid):
+    """Write the pending BYTESea JSON, printing retry instructions on failure."""
+    if write_pending_bytesea_json(project, material, manifest_path, tolid):
         return True
+    json_cmd, output_path = bytesea_json_command(project, material, manifest_path, tolid)
 
     print(
-        f"ERROR: BytESea JSON creation failed for project '{project}', " f"material '{material}'.",
+        f"ERROR: BYTESea JSON creation failed for project '{project}', " f"material '{material}'.",
         file=sys.stderr,
     )
     print(
@@ -369,7 +379,7 @@ def run_create_bytesea_json(project, material, manifest_path, tolid):
         "do not repeat those steps.",
         file=sys.stderr,
     )
-    print("To retry the BytESea JSON creation only, run:", file=sys.stderr)
+    print("To retry the BYTESea JSON creation only, run:", file=sys.stderr)
     print(f"    {' '.join(json_cmd)}", file=sys.stderr)
     print(f"    chmod a+rwx {output_path}", file=sys.stderr)
     return False
