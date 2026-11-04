@@ -48,6 +48,14 @@ def main():
         default="manifest.txt",
         help="Path to the manifest file to write (default: manifest.txt)",
     )
+    parser.add_argument(
+        "--alternate",
+        action="store_true",
+        help=(
+            "Alternate haplotype: take STUDY from 'PRJEB Alternate Assemblage' and "
+            "append ' alternate haplotype' to ASSEMBLYNAME"
+        ),
+    )
 
     args = parser.parse_args()
 
@@ -55,7 +63,7 @@ def main():
     if assembly_json is None:
         sys.exit(1)
 
-    study, assembly_name, coverage = extract_fields(assembly_json)
+    study, assembly_name, coverage = extract_fields(assembly_json, alternate=args.alternate)
     sample = get_master_ena_sample(assembly_json)
     platform = determine_platform(assembly_json)
     program = determine_program(assembly_json)
@@ -237,17 +245,22 @@ def determine_program(assembly: dict) -> str:
     return f"{determine_assembler(assembly)},{DOWNSTREAM_PROGRAMS}"
 
 
-def extract_fields(assembly: dict):
+def extract_fields(assembly: dict, alternate: bool = False):
     """Extract study accession, assembly name and LR coverage from NGL-BI.
 
-    Any field that cannot be found is left blank and a warning is emitted.
+    With alternate=True, STUDY comes from the alternate haplotype project and
+    ASSEMBLYNAME gets an " alternate haplotype" suffix. Any field that cannot be
+    found is left blank and a warning is emitted.
     """
     properties = assembly.get("properties", {})
+    accession_property = (
+        "alternateAssemblyProjectAccession" if alternate else "primaryAssemblyProjectAccession"
+    )
 
-    study = properties.get("primaryAssemblyProjectAccession", {}).get("value")
+    study = properties.get(accession_property, {}).get("value")
     if not study:
         print(
-            "WARNING: primaryAssemblyProjectAccession not found in NGL-BI, leaving STUDY blank",
+            f"WARNING: {accession_property} not found in NGL-BI, leaving STUDY blank",
             file=sys.stderr,
         )
         study = ""
@@ -258,6 +271,8 @@ def extract_fields(assembly: dict):
         assembly_name = ""
     else:
         assembly_name = f"{tolid}.1"
+        if alternate:
+            assembly_name += " alternate haplotype"
 
     coverage = extract_lr_coverage(assembly)
 
