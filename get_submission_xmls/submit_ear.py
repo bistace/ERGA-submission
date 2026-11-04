@@ -17,7 +17,7 @@ S3_PREFIX = "EARs"
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Upload an EAR report PDF to the bytesea S3 bucket."
+        description="Upload an EAR report PDF to the BYTESea S3 bucket."
     )
     parser.add_argument("--project", required=True, help="Project code")
     parser.add_argument("--material", required=True, help="Material code")

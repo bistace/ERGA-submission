@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Push BytESea assembly metrics JSON files to the Genoby assembly_metrics route.
+"""Push BYTESea assembly metrics JSON files to the Genoby assembly_metrics route.
 
 Each file is sent on its own as {"payload": [<json>], "dry": <bool>}. A file that
 the server accepts is moved from pending to the completed directory, unless
