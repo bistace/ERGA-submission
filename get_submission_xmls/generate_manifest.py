@@ -2,7 +2,10 @@
 import argparse
 import csv
 import glob
+import gzip
+import os
 import requests
+import shutil
 import sys
 
 
@@ -68,9 +71,10 @@ def main():
     platform = determine_platform(assembly_json)
     program = determine_program(assembly_json)
     description = get_description(args.project, args.material)
+    fasta = ensure_gzipped_fasta(args.fasta)
 
     manifest = build_manifest(
-        study, sample, assembly_name, coverage, program, platform, description, args.fasta
+        study, sample, assembly_name, coverage, program, platform, description, fasta
     )
     write_manifest(manifest, args.output)
 
@@ -82,6 +86,29 @@ def main():
     print(f"  PROGRAM:      {program}", file=sys.stderr)
     print(f"  PLATFORM:     {platform}", file=sys.stderr)
     print(f"  DESCRIPTION:  {'set from EAR data' if description else 'blank'}", file=sys.stderr)
+
+
+def ensure_gzipped_fasta(fasta: str) -> str:
+    """Return a gzipped FASTA path for webin-cli, compressing the input if needed.
+
+    Detection uses the gzip magic bytes, not the extension. An uncompressed
+    file is written next to the original as <fasta>.gz; the original is kept.
+    """
+    if not os.path.isfile(fasta):
+        sys.exit(f"Error: FASTA file not found: {fasta}")
+    with open(fasta, "rb") as handle:
+        if handle.read(2) == b"\x1f\x8b":
+            return fasta
+    if fasta.endswith(".gz"):
+        sys.exit(f"Error: {fasta} has a .gz extension but is not gzipped; fix the file first")
+
+    gzipped = fasta + ".gz"
+    if os.path.exists(gzipped):
+        sys.exit(f"Error: {fasta} is not gzipped and {gzipped} already exists; check which one to use")
+    print(f"{fasta} is not gzipped, compressing it to {gzipped}", file=sys.stderr)
+    with open(fasta, "rb") as src, gzip.open(gzipped, "wb") as dst:
+        shutil.copyfileobj(src, dst)
+    return gzipped
 
 
 # --- NGL-BI API ---
